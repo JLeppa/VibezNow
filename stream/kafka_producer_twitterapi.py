@@ -2,6 +2,7 @@
 import sys
 import simplejson
 import requests
+import time
 from requests_oauthlib import OAuth1
 from itertools import islice
 from kafka.client import SimpleClient
@@ -43,14 +44,17 @@ class Producer(object):
 
     def produce_msgs(self, source_partition):
         msg_cnt = 0
-        for tweet in islice(tweet_generator(), 2):
+        for tweet in islice(tweet_generator(), 300):
         #for tweet in tweet_generator():
             #print tweet
-            str_fmt = "{};{}"
-            message_info = str_fmt.format(source_partition,
-                                          tweet)
-            print message_info
-            self.producer.send_messages('twitter_test', source_partition, message_info)
+            #str_fmt = "{};{}"
+            #message_info = str_fmt.format(source_partition,
+            #                              tweet)
+            #print message_info
+            #self.producer.send_messages('twitter_test', source_partition, message_info)
+            test_tweet = "tweet " + str(msg_cnt)
+            self.producer.send_messages('twitter_test', source_partition, test_tweet)
+            time.sleep(5)
             msg_cnt += 1
            # print msg_cnt
             
