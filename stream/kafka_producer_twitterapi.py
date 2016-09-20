@@ -4,7 +4,6 @@ import simplejson
 import requests
 import time
 from requests_oauthlib import OAuth1
-from itertools import islice
 from kafka.client import SimpleClient
 from kafka.producer import KeyedProducer
 
@@ -19,22 +18,9 @@ auth = OAuth1(
 )
 
 US_BOUNDING_BOX = "-125.00,24.94, -66.93,49.59"
-def tweet_generator():
-    stream = requests.post('https://stream.twitter.com/1.1/statuses/filter.json',
-                           auth=auth,
-                           stream=True,
-                           data={"locations" : US_BOUNDING_BOX})
-
-    for line in stream.iter_lines():
-        if not line:
-            continue
-        tweet = simplejson.loads(line)
-        if 'text' in tweet:
-            yield tweet['text']
-
-# Test print of 20 messages to make sure I get tweets from Twitter Api
-#for tweet in islice(tweet_generator(), 20):
-#    print tweet
+stream = requests.post('https://stream.twitter.com/1.1/statuses/filter.json',
+                       auth=auth, stream=True,
+                       data={"locations" : US_BOUNDING_BOX})
 
 class Producer(object):
 
@@ -42,23 +28,19 @@ class Producer(object):
         self.client = SimpleClient(addr)
         self.producer = KeyedProducer(self.client)
 
-    def produce_msgs(self, source_partition):
+    def produce_msgs(self, src_partition):
+        scenario = 2 # continuous (default) ; limited testing (scenario == 2)
         msg_cnt = 0
-        for tweet in islice(tweet_generator(), 300):
-        #for tweet in tweet_generator():
-            #print tweet
-            #str_fmt = "{};{}"
-            #message_info = str_fmt.format(source_partition,
-            #                              tweet)
-            #print message_info
-            #self.producer.send_messages('twitter_test', source_partition, message_info)
-            test_tweet = "tweet " + str(msg_cnt)
-            self.producer.send_messages('twitter_test', source_partition, test_tweet)
-            time.sleep(5)
+        for tweet in stream.iter_lines():
+            if not tweet:
+                continue
+            self.producer.send_messages('twitter_test', src_partition, tweet)
             msg_cnt += 1
-           # print msg_cnt
-            
-
+            if scenario == 2:
+                print tweet
+                time.sleep(5)
+                if msg_cnt >= 2:
+                    break
 
 if __name__ == "__main__":
     args = sys.argv
