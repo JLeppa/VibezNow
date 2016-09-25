@@ -8,15 +8,59 @@ import redis
 import simplejson as json
 #import riak
 #import pyspark_riak
+from stemming.porter2 import stem
+from math import log
 
 from pyspark import SparkContext
 from pyspark.streaming import StreamingContext
-from pyspark.streaming.kafka import KafkaUtils 
+from pyspark.streaming.kafka import KafkaUtils
+from pyspark.mllib.linalg import SparseVector 
+
 
 # Define auxiliary functions
+def sparse_norm(sparse_vector):
+    vector_list = sparse_vector.collect()
+    sparse_vector = vector_list[0]
+    vector_norm = sparse_vector.norm(2)
+    return sc.parallelize([vector_norm])
+
+def tuples_into_sparse(ind_rdd):
+    # Input is RDD with (word_index, ntf_idf) tuples, output is a sparse vector of length 4681
+    ind_rdd = ind_rdd.sortByKey()
+    tuple_list = ind_rdd.collect()
+    #print(tuple_list)
+    indeces = []
+    values = []
+    for item in tuple_list:
+        indeces.append(item[0])
+        values.append(item[1])
+    #print(indeces)
+    #print(values)
+    tweet_vector = SparseVector(4681, indeces, values)
+    #print(tweet_vector)
+    return sc.parallelize([tweet_vector])
+
+def normalize_tf(tf_rdd):
+    # Input is an RDD containing list of tuples in (term, term_freq) format
+    # Output is an RDD containing the same list as (term, a+(1-a)*term_freq/max(term_freq))
+    
+    nf = 0.4 # Normalization factor used when calculating normalized term frequency
+    # Search for the max term frequency, max_tf, from all term frequencies, tf
+    freq = tf_rdd.map(lambda x: x[1])
+    max_tf = freq.max()
+    #max_tf = max_tf.collect()[0]
+    #max_tf = tf.reduce(lambda x, y: max(x, y))
+    ntf_rdd = tf_rdd.map(lambda x: (x[0], nf + (1-nf)*x[1]/max_tf))
+    return ntf_rdd
+    #ntf_idf_rdd = ntf_rdd.map(lambda x: (x[0], x[1]*log(query_count/(1+int(query_freq[x[0]])))))
+    #return ntf_idf_rdd
+
 def raw_stream_to_words(input_stream):
     # Tweet in json string as a second object of input tuple
     raw_stream = input_stream.map(lambda x: json.loads(x[1]))
+
+    # Filter out messages with no text field
+    raw_stream = raw_stream.filter(lambda x: 'text' in x)
 
     # Pick only "text" field and remove non-ascii characters
     tweet = raw_stream.map(lambda x: x['text'].encode("utf-8","replace"))
@@ -32,8 +76,17 @@ def raw_stream_to_words(input_stream):
     # Split the lines into words
     tweet = tweet.flatMap(lambda x: x.split(" "))
 
-    # Return the words in lower case
-    return tweet.map(lambda x: x.lower())
+    # Remove empty strings
+    tweet = tweet.filter(lambda x: len(x) > 0)
+
+    # Lower case the words
+    tweet = tweet.map(lambda x: x.lower())
+
+    # Stem the words
+    tweet = tweet.map(lambda x: stem(x))
+
+    # Return the words
+    return tweet
 
 
 if __name__ == "__main__":
@@ -45,6 +98,25 @@ if __name__ == "__main__":
     # Open strict connection to redis data store
     red = redis.StrictRedis(host='172.31.0.231', port=6379, db=0,
                             password='tamaonsalasanaredikselle')
+    # Get keys to the lyrics vectors as a list
+    lyrics_keys_small = red.get('get_keys_small')
+    # Get track info in a dictionary, track_id is key, tuple of artist and song as value
+    track_info = red.hgetall("track_info_key")
+    # Get the list of 4681 words in the order of ntf-idf vectors of lyrics
+    lyric_words = red.get('words_key')
+    # Get dictionary to connect words into their indeces in the bow vector
+    word_index = red.hgetall('word_indeces_key')
+    # Get the non.ordered set of words
+    word_set = red.get('word_set_key')
+    word_set = eval(word_set)
+    # Get vector of how many times each word has been present in previous queries
+    query_freq = red.hgetall('hist_freq_key')
+    # Get the total number of previous queries
+    query_count = red.get('hist_count_key')
+    query_count = int(query_count)
+    # Get the lyrics of 237642 songs as sparse bag of words
+    #  key=track_id, value=(indeces to words, ntf-idf of words, norm of lyrics vector)
+    lyrics_sparse = red.hgetall('ntf_idf_lyrics_key')
 
     # Set the Spark context (connection to spark cluster, make RDDs)
     sc = SparkContext(appName="KafkaTwitterStream")
@@ -85,41 +157,43 @@ if __name__ == "__main__":
     words = raw_stream_to_words(kvs)
     words.pprint()
 
+    # Filter words not in the set of words used for bag-of-words
+    words = words.filter(lambda x: x in word_set)
+    words.pprint()
+
     # Count the number of words in the batch of tweets
     pairs = words.map(lambda word: (word, 1))
     word_count = pairs.reduceByKey(lambda x, y: x + y)
     word_count.pprint()
+
+    # Search for the max term frequency, max_tf, from all term frequencies, tf
+    tf = word_count.map(lambda x: x[1])
+    max_tf = tf.reduce(lambda x, y: max(x, y))
+    tf.pprint()
+    max_tf.pprint()
+
+    # Update historical query frequency and count
+    query_count += 1
+    # query_freq OMITTED
+
+    # Normalize the word counts
+    ntf = word_count.transform(normalize_tf)
+    ntf.pprint()
     
-    # Processing part:
-    """
-    def process(x):
-        print x
-        print len(x)
-        #x.count()
-        #print x.count()
-        #print rdd.collect()
-        #tweet_rdd = rdd.collect()
-        #tweet_batch_count = tweet_rdd.count()
-        #print tweet_batch_count
-        #rdd.take(1)
 
-        #red.set('tweet_key', x) # Put tweet into redis
-        #red.get('tweet_key')
+    # Pick up 10 words with highest ntf-idf values
+    # OMITTED FOR NOW
 
-    kvs.foreachRDD(lambda rdd: rdd.foreach(process_x))
-    """    
-    """
-    lines = kvs.map(lambda x: x[1])
-    print type(lines)
-    counts = lines.flatMap(lambda line: line.split(" ")) \
-            .map(lambda word: (word, 1)) \
-            .reduceByKey(lambda a, b: a+b)
-    print type(counts)
-    counts.pprint()
-    """
+    # Transform the (word, weight) tuples into a sparse vector
+    ntf_ind = ntf.map(lambda x: (int(word_index[x[0]]), x[1]))
+    ntf_ind.pprint()
+    tweet_vector = ntf_ind.transform(tuples_into_sparse)
+    tweet_vector.pprint()
 
-    #red.set('tweet_key', 'tweet') # Put tweet into redis
-    #red.get('tweet_key')
+    # Calculate the norm of the tweet_vector
+    tweet_norm = tweet_vector.transform(sparse_norm)
+    tweet_norm.pprint()
+    
 
     ssc.start()
     ssc.awaitTermination()
