@@ -18,6 +18,36 @@ from pyspark.mllib.linalg import SparseVector
 
 
 # Define auxiliary functions
+def cosine_similarity(sparse_vec):
+    # Input is sparse vector of tweet batch in form (4681, ([indeces], [tf]))
+    #   In format (ind, ntf-idf)
+    # Lyrics dictionary is in format track_id: ([indeces], [tf-idf], norm_of_vector)
+    lyrics = lyrics_broadcast.value
+    tracks = track_ids_broadcast.value
+    top_tracks = []
+    for track in tracks:
+        aux_dic = {}
+        aux_set = set()
+        lyric_vector = lyrics[track]
+        lyric_ind = lyric_vector[0]
+        lyric_val = lyric_vector[1]
+        lyric_norm = lyric_vector[2]
+        for item in lyric_ind:
+            aux_dic[lyric_ind] = lyric_val
+            aux_set.add(lyric_ind)
+        tweet_vec = sparse_vec.filter(lambda x: x[0] in aux_set)
+        if tweet_vec.isEmpty():
+            top_tracks.append((track, 0))
+            print((track, 0))
+        else:
+            dot_prod = tweet_vec.map(lambda x: x[1]*aux_dic[x[0]])
+            dot_prod = dot_prod.reduce(lambda x, y: x+y)
+            similarity = dot_prod.collect()/lyric_norm
+            print((track, similarity))
+            top_tracks.append((track, similarity))
+        
+    return sc.serialize(top_tracks)
+
 def sparse_norm(sparse_vector):
     vector_list = sparse_vector.collect()
     sparse_vector = vector_list[0]
@@ -25,6 +55,15 @@ def sparse_norm(sparse_vector):
     return sc.parallelize([vector_norm])
 
 def tuples_into_sparse(ind_rdd):
+    # Input is RDD with (word_index, ntf_idf) tuples, output is a sparse vector of length 4681
+    ind_rdd_sort = ind_rdd.sortByKey() # Sort tuples based on the word index for sparse vector format
+    ind_rdd_t = ind_rdd_sort.map(lambda x: (4681, x))
+    sparse_vec = ind_rdd_t.combineByKey(lambda value: ([value[0]], [value[1]]),
+                                        lambda x, value: (x[0]+[value[0]], x[1]+[value[1]]),
+                                        lambda x, y: (x[0]+y[0], x[1]+y[1]))
+    return sparse_vec
+
+def tuples_into_sparse_old(ind_rdd):
     # Input is RDD with (word_index, ntf_idf) tuples, output is a sparse vector of length 4681
     ind_rdd = ind_rdd.sortByKey()
     tuple_list = ind_rdd.collect()
@@ -100,6 +139,7 @@ if __name__ == "__main__":
                             password='tamaonsalasanaredikselle')
     # Get keys to the lyrics vectors as a list
     lyrics_keys_small = red.get('get_keys_small')
+    lyrics_keys_small = eval(lyrics_keys_small)
     # Get track info in a dictionary, track_id is key, tuple of artist and song as value
     track_info = red.hgetall("track_info_key")
     # Get the list of 4681 words in the order of ntf-idf vectors of lyrics
@@ -124,6 +164,10 @@ if __name__ == "__main__":
     # Set Spark streaming context (connection to spark cluster, make Dstreams)
     batch_duration = 20  # Batch duration (s)
     ssc = StreamingContext(sc, batch_duration)
+
+    # Broadcast lyrics to nodes
+    lyrics_broadcast = sc.broadcast(lyrics_sparse)
+    track_ids_broadcast = sc.broadcast(lyrics_keys_small)
 
     # Test putting some data into Riak
     riak_test = 0
@@ -190,9 +234,13 @@ if __name__ == "__main__":
     tweet_vector = ntf_ind.transform(tuples_into_sparse)
     tweet_vector.pprint()
 
+    # Calculate cosine similarity against lyrics and return top 10
+    top_tracks = ntf_ind.transform(cosine_similarity)
+    top_tracks.pprint()
+
     # Calculate the norm of the tweet_vector
-    tweet_norm = tweet_vector.transform(sparse_norm)
-    tweet_norm.pprint()
+    #tweet_norm = tweet_vector.transform(sparse_norm)
+    #tweet_norm.pprint()
     
 
     ssc.start()
