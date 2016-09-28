@@ -146,7 +146,19 @@ def take_top(rdd):
     top_n_val = cos_values.takeOrdered(n, key=lambda x: -x)
     top_n = rdd.filter(lambda x: x[1] in top_n_val)
     return top_n
-    
+
+def take_top_words(rdd):
+    # input format (word_index, word_tf)
+    weight_values = rdd.map(lambda x: x[1])
+    n = 8
+    top_n_val = weight_values.takeOrdered(n, key=lambda x: -x)
+    top_n = rdd.filter(lambda x: x[1] in top_n_val)
+    return top_n
+
+def songs_to_redis(rdd):
+    top_to_redis = rdd.collect()
+    red.set('top_songs_key', top_to_redis)
+    return rdd
 
 if __name__ == "__main__":
     
@@ -164,6 +176,8 @@ if __name__ == "__main__":
     track_info = red.hgetall("track_info_key")
     # Get the list of 4681 words in the order of ntf-idf vectors of lyrics
     lyric_words = red.get('words_key')
+    # Get dictionary with stemmed word as key and unstemmed as value
+    unstem = red.hgetall('unstem_key')
     # Get dictionary to connect words into their indeces in the bow vector
     word_index = red.hgetall('word_indeces_key')
     # Get the non.ordered set of words
@@ -178,7 +192,7 @@ if __name__ == "__main__":
     #  key=track_id, value=(indeces to words, ntf-idf of words, norm of lyrics vector)
     lyrics_vec_dict = red.hgetall('ntf_idf_lyrics_key')
     lyrics_sparse = []
-    line_limit = 100
+    line_limit = 1000
     counter = 0
     for key in lyrics_vec_dict:
         # track_id: ([indeces], [tf-idf], vec_norm)
@@ -259,8 +273,10 @@ if __name__ == "__main__":
 #    ntf.pprint()
     
 
-    # Pick up 10 words with highest ntf-idf values
-    # OMITTED FOR NOW
+    # Pick up n words with highest ntf-idf values (word, tf)
+    top_words = ntf.transform(take_top_words)
+    top_words = top_words.map(lambda x: (unstem[x[0]], x[1]))
+    top_words.pprint()
 
     # Transform the (word, weight) tuples into a sparse vector
     ntf_ind = ntf.map(lambda x: (int(word_index[x[0]]), x[1]))
@@ -276,24 +292,27 @@ if __name__ == "__main__":
 
     # Calculate the cosine similarity and return n top matches
     cos_similarity = tweet_and_lyrics.transform(cosine_similarity)
-    cos_similarity.pprint()
+#    cos_similarity.pprint()
 
     # Take the top n of the matches
     cos_sim_top = cos_similarity.transform(take_top)
-    #n = 10 # How many best matches are chosen and returned
-    #cos_sim_top = cos_similarity.takeOrdered(n, key = lambda x: x[1])
-    #cos_sim_top = cos_similarity.map(lambda x: (x[1], x[0]))
-    #cos_sim_top = cos_sim_top.sortByKey(False)
-    cos_sim_top.pprint()
-    print(cos_sim_top)
+#    cos_sim_top.pprint()
+    
+# Get track info in a dictionary, track_id is key, tuple of artist and song as value
+    track_info = red.hgetall("track_info_key")
 
-    # Calculate cosine similarity against lyrics and return top 10
-    #top_tracks = ntf_ind.transform(cosine_similarity)
-    #top_tracks.pprint()
+    # Get the lyric info of the top n songs ((artist, song), similarity)
+    top_songs = cos_sim_top.map(lambda x: (track_info[x[0]], x[1]))
+    top_songs.pprint()
+    
+    # Write top songs and words to redis
+    #top_to_redis = top_songs.collect()
+    #red.set('top_songs_key', top_to_redis)
+    top_songs.transform(songs_to_redis)
+    red.set('top_word_key', top_words)
 
     # Calculate the norm of the tweet_vector
     #tweet_norm = tweet_vector.transform(sparse_norm)
-    #tweet_norm.pprint()
     
 
     ssc.start()
