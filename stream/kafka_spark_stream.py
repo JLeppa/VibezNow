@@ -14,11 +14,12 @@ from math import log
 from pyspark import SparkContext
 from pyspark.streaming import StreamingContext
 from pyspark.streaming.kafka import KafkaUtils
-from pyspark.mllib.linalg import SparseVector 
+from pyspark.mllib.linalg import SparseVector
 
 
 # Define auxiliary functions
-def cosine_similarity(sparse_vec):
+
+def cosine_similarity_old(sparse_vec):
     # Input is sparse vector of tweet batch in form (4681, ([indeces], [tf]))
     #   In format (ind, ntf-idf)
     # Lyrics dictionary is in format track_id: ([indeces], [tf-idf], norm_of_vector)
@@ -127,6 +128,25 @@ def raw_stream_to_words(input_stream):
     # Return the words
     return tweet
 
+def cosine_similarity(rdd):
+    # The format of input rdd:
+    # (1, ((4681, [tweet_indeces], [tweet_tf]), (track_id, track_norm, 4681, [track_indeces], [track_tf_idf])))
+    #tweet_norm = rdd.map(lambda x: SparseVector(x[1][0][0], x[1][0][1], x[1][0][2]).norm(2)) #Norm of tweet
+    cos_sim = rdd.map(lambda x: (x[1][1][0], 
+                                 SparseVector(x[1][0][0], x[1][0][1], x[1][0][2])\
+                                 .dot(SparseVector(x[1][1][2], x[1][1][3], x[1][1][4]))/\
+                                 SparseVector(x[1][0][0], x[1][0][1], x[1][0][2]).norm(2)/x[1][1][1]))
+    return cos_sim
+
+def take_top(rdd):
+    # input format (track_id, cos_similarity)
+    #rdd = rdd.map(lambda x: (x[1], x[0]))
+    cos_values = rdd.map(lambda x: x[1])
+    n = 5
+    top_n_val = cos_values.takeOrdered(n, key=lambda x: -x)
+    top_n = rdd.filter(lambda x: x[1] in top_n_val)
+    return top_n
+    
 
 if __name__ == "__main__":
     
@@ -156,17 +176,31 @@ if __name__ == "__main__":
     query_count = int(query_count)
     # Get the lyrics of 237642 songs as sparse bag of words
     #  key=track_id, value=(indeces to words, ntf-idf of words, norm of lyrics vector)
-    lyrics_sparse = red.hgetall('ntf_idf_lyrics_key')
+    lyrics_vec_dict = red.hgetall('ntf_idf_lyrics_key')
+    lyrics_sparse = []
+    line_limit = 100
+    counter = 0
+    for key in lyrics_vec_dict:
+        # track_id: ([indeces], [tf-idf], vec_norm)
+        aux_tuple = eval(lyrics_vec_dict[key])
+        # (track_id, vec_norm, 4681, [indeces], [tf-idf]))
+        lyrics_tuple = (key, aux_tuple[2], 4681, aux_tuple[0], aux_tuple[1])
+        lyrics_sparse.append(lyrics_tuple)
+        counter += 1
+        if counter >= line_limit:
+            break
+    
 
     # Set the Spark context (connection to spark cluster, make RDDs)
     sc = SparkContext(appName="KafkaTwitterStream")
     
     # Set Spark streaming context (connection to spark cluster, make Dstreams)
-    batch_duration = 20  # Batch duration (s)
+    batch_duration = 10  # Batch duration (s)
     ssc = StreamingContext(sc, batch_duration)
 
     # Broadcast lyrics to nodes
-    lyrics_broadcast = sc.broadcast(lyrics_sparse)
+    #lyrics_broadcast = sc.broadcast(lyrics_sparse)
+    lyrics_rdd = sc.parallelize(lyrics_sparse)
     track_ids_broadcast = sc.broadcast(lyrics_keys_small)
 
     # Test putting some data into Riak
@@ -199,22 +233,22 @@ if __name__ == "__main__":
     kvs = KafkaUtils.createDirectStream(ssc, [topic], kafkaBrokers)
     #kvs.pprint()
     words = raw_stream_to_words(kvs)
-    words.pprint()
+#    words.pprint()
 
     # Filter words not in the set of words used for bag-of-words
     words = words.filter(lambda x: x in word_set)
-    words.pprint()
+#    words.pprint()
 
     # Count the number of words in the batch of tweets
     pairs = words.map(lambda word: (word, 1))
     word_count = pairs.reduceByKey(lambda x, y: x + y)
-    word_count.pprint()
+#    word_count.pprint()
 
     # Search for the max term frequency, max_tf, from all term frequencies, tf
     tf = word_count.map(lambda x: x[1])
     max_tf = tf.reduce(lambda x, y: max(x, y))
-    tf.pprint()
-    max_tf.pprint()
+#    tf.pprint()
+#    max_tf.pprint()
 
     # Update historical query frequency and count
     query_count += 1
@@ -222,7 +256,7 @@ if __name__ == "__main__":
 
     # Normalize the word counts
     ntf = word_count.transform(normalize_tf)
-    ntf.pprint()
+#    ntf.pprint()
     
 
     # Pick up 10 words with highest ntf-idf values
@@ -230,13 +264,32 @@ if __name__ == "__main__":
 
     # Transform the (word, weight) tuples into a sparse vector
     ntf_ind = ntf.map(lambda x: (int(word_index[x[0]]), x[1]))
-    ntf_ind.pprint()
+#    ntf_ind.pprint()
     tweet_vector = ntf_ind.transform(tuples_into_sparse)
-    tweet_vector.pprint()
+    tweet_vector = tweet_vector.map(lambda x: (x[0], x[1][0], x[1][1]))
+#    tweet_vector.pprint()
+
+    # Join the tweet vector dstream with the lyrics rdd
+    # (1, ((4681, [tweet_indeces], [tweet_tf]), (track_id, track_norm, 4681, [track_indeces], [track_tf_idf])))
+    tweet_and_lyrics = tweet_vector.transform(lambda rdd: rdd.map(lambda x: (1,x)).join(lyrics_rdd.map(lambda x: (1,x))))
+#    tweet_and_lyrics.pprint()
+
+    # Calculate the cosine similarity and return n top matches
+    cos_similarity = tweet_and_lyrics.transform(cosine_similarity)
+    cos_similarity.pprint()
+
+    # Take the top n of the matches
+    cos_sim_top = cos_similarity.transform(take_top)
+    #n = 10 # How many best matches are chosen and returned
+    #cos_sim_top = cos_similarity.takeOrdered(n, key = lambda x: x[1])
+    #cos_sim_top = cos_similarity.map(lambda x: (x[1], x[0]))
+    #cos_sim_top = cos_sim_top.sortByKey(False)
+    cos_sim_top.pprint()
+    print(cos_sim_top)
 
     # Calculate cosine similarity against lyrics and return top 10
-    top_tracks = ntf_ind.transform(cosine_similarity)
-    top_tracks.pprint()
+    #top_tracks = ntf_ind.transform(cosine_similarity)
+    #top_tracks.pprint()
 
     # Calculate the norm of the tweet_vector
     #tweet_norm = tweet_vector.transform(sparse_norm)
