@@ -157,8 +157,15 @@ def take_top_words(rdd):
 
 def songs_to_redis(rdd):
     top_to_redis = rdd.collect()
+    #print(type(top_to_redis))
+    #print(top_to_redis)
     red.set('top_songs_key', top_to_redis)
-    return rdd
+
+def words_to_redis(rdd):
+    top_to_redis = rdd.collect()
+    #print(type(top_to_redis))
+    #print(top_to_redis)
+    red.set('top_words_key', top_to_redis)
 
 if __name__ == "__main__":
     
@@ -192,7 +199,7 @@ if __name__ == "__main__":
     #  key=track_id, value=(indeces to words, ntf-idf of words, norm of lyrics vector)
     lyrics_vec_dict = red.hgetall('ntf_idf_lyrics_key')
     lyrics_sparse = []
-    line_limit = 1000
+    line_limit = 10000
     counter = 0
     for key in lyrics_vec_dict:
         # track_id: ([indeces], [tf-idf], vec_norm)
@@ -308,8 +315,12 @@ if __name__ == "__main__":
     # Write top songs and words to redis
     #top_to_redis = top_songs.collect()
     #red.set('top_songs_key', top_to_redis)
-    top_songs.transform(songs_to_redis)
-    red.set('top_word_key', top_words)
+    #top_songs.transform(songs_to_redis)
+    top_songs.foreachRDD(songs_to_redis)
+    top_words.foreachRDD(words_to_redis)
+    #print(type(top_words))
+    #print(type(top_words.collect()))
+    #red.set('top_word_key', top_words.collect())
 
     # Calculate the norm of the tweet_vector
     #tweet_norm = tweet_vector.transform(sparse_norm)
