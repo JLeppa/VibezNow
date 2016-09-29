@@ -1,8 +1,12 @@
 import redis
 import ast
 import re
+import simplejson
 
-red = redis.StrictRedis(host='172.31.0.231', port=6379, db=0, password='tamaonsalasanaredikselle')
+with open("redis_pw.json.nogit") as fh:
+    redis_pw = simplejson.loads(fh.read())
+red = redis.StrictRedis(host='172.31.0.231', port=6379, db=0,
+                        password=redis_pw["password"])
 
 file0 = open('words_in_order.txt', 'r')
 words = []

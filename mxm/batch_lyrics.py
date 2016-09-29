@@ -1,12 +1,17 @@
 import re
 import math
-#import simplejson as json
+import simplejson as json
 import redis
 from stemming.porter2 import stem
 
+# Open connection to Redis
+with open("redis_pw.json.nogit") as fh:
+    redis_pw = simplejson.loads(fh.read())
+red_con = redis.StrictRedis(host='172.31.0.231', port=6379, db=0,
+                        password=redis_pw["password"])
+
 # Save a test dictionary to redis
 #test_dict = {"tk": [1.23, 3.25, 8.12456], "tk2": [6.1324, 234.1, 34]}
-#red_con = redis.StrictRedis(host='172.31.0.231', port=6379, db=0, password='tamaonsalasanaredikselle')
 #red_con.hmset("test_dict_key", test_dict)
 #test_get = red_con.hgetall("test_dict_key")
 #print test_get
@@ -300,7 +305,6 @@ file_5.close()
 #file_9.close()
 
 # Save the ntf_idf_dictionary in sparse format into redis
-red_con = redis.StrictRedis(host='172.31.0.231', port=6379, db=0, password='tamaonsalasanaredikselle')
 red_con.hmset("ntf_idf_lyrics_key", ntf_idf_dict)
 test_get = red_con.hgetall("ntf_idf_lyrics_key")
 print(test_get)
@@ -348,7 +352,6 @@ tot_cleaned = len(track_dict)
 
 
 # Save track_info dictionary to Redis
-red_con = redis.StrictRedis(host='172.31.0.231', port=6379, db=0, password='tamaonsalasanaredikselle')
 red_con.hmset("track_info_key", track_info)
 test_track_info = red_con.hgetall("track_info_key")
 print len(test_track_info)

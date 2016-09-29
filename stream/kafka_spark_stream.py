@@ -16,6 +16,10 @@ from pyspark.streaming import StreamingContext
 from pyspark.streaming.kafka import KafkaUtils
 from pyspark.mllib.linalg import SparseVector
 
+# Get the password for Redis into redis_pw("password")
+with open("redis_pw.json.nogit") as fh:
+    redis_pw = json.loads(fh.read())
+
 
 # Define auxiliary functions
 
@@ -175,7 +179,7 @@ if __name__ == "__main__":
 
     # Open strict connection to redis data store
     red = redis.StrictRedis(host='172.31.0.231', port=6379, db=0,
-                            password='tamaonsalasanaredikselle')
+                            password=redis_pw["password"])
     # Get keys to the lyrics vectors as a list
     lyrics_keys_small = red.get('get_keys_small')
     lyrics_keys_small = eval(lyrics_keys_small)
