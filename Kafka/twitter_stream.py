@@ -11,10 +11,10 @@ def main():
     and six separate topics for messages containing given word """
 
     # Validate inline arguments
-    if len(sys.argv) != 1 and len(sys.argv) != 3:
+    if len(sys.argv) != 1 and len(sys.argv) != 4:
         print "Usage:"
         print "For real-time stream: ./twitter_stream"
-        print "For reading from file: ./twitter_stream file_name wait_time_between_messages"
+        print "For reading from file: ./twitter_stream file_name num_file_loops wait_time_between_messages"
         quit()
 
     # Set up Kafka producer
@@ -64,17 +64,15 @@ def main():
                     message = json_tweet['text'].encode("utf-8","replace")
                     for word in topic_words:
                         if word in message:
-                            print message
-                            print topic_words[word]
                             producer_topic.send(topic_words[word], tweet)
                 msg_cnt += 1
                 if msg_cnt % 100 == 0:
                     print msg_cnt
     
     # Read tweets from a file and produce them
-    if len(sys.argv) == 3:
+    if len(sys.argv) == 4:
         # Set how many times file is looped over
-        for x in range(1):
+        for x in range(int(sys.argv[2])):
             with open(sys.argv[1]) as fh:
                 msg_cnt = 0
                 for line in fh:
@@ -89,10 +87,10 @@ def main():
                             if word in message:
                                 producer_topic.send(topic_words[word], tweet)
                     msg_cnt += 1
-                    if msg_cnt % 100 == 0:
+                    if msg_cnt % 1000 == 0:
                         print msg_cnt
                     #wait = raw_input("PRESS ENTER TO CONTINUE.")
-                    time.sleep(float(sys.argv[2]))
+                    time.sleep(float(sys.argv[3]))
 
 if __name__ == "__main__":
     main()
