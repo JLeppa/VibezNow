@@ -13,42 +13,86 @@ from pyspark.streaming import StreamingContext
 from pyspark.streaming.kafka import KafkaUtils
 from pyspark.mllib.linalg import SparseVector
 
-# Get the password for Redis into redis_pw("password")
-with open("redis_pw.json.nogit") as fh:
-    redis_pw = json.loads(fh.read())
+## Get the password for Redis into redis_pw("password")
+#with open("redis_pw.json.nogit") as fh:
+#    redis_pw = json.loads(fh.read())
+## Open connection to Redis data base
+#red = redis.StrictRedis(host='172.31.0.231', port=6379, db=0,
+#                        password=redis_pw["password"])
+## Get keys to the lyrics vectors as a list
+#lyrics_keys_small = red.get('get_keys_small')
+#lyrics_keys_small = eval(lyrics_keys_small)
+## Get track info in a dictionary, track_id is key, tuple of artist and song as value
+#track_info = red.hgetall("track_info_key")
+## Get the list of 4681 words in the order of ntf-idf vectors of lyrics
+#lyric_words = red.get('words_key')
+## Get dictionary with stemmed word as key and unstemmed as value
+#unstem = red.hgetall('unstem_key')
+## Get dictionary to connect words into their indeces in the bow vector
+#word_index = red.hgetall('word_indeces_key')
+## Get the non.ordered set of words
+#word_set = red.get('word_set_key')
+#word_set = eval(word_set)
+## Get vector of how many times each word has been present in previous queries
+#query_freq = red.hgetall('hist_freq_key')
+## Get the total number of previous queries
+#query_count = red.get('hist_count_key')
+#query_count = int(query_count)
+## Get the lyrics of 237642 songs as sparse bag of words
+##  key=track_id, value=(indeces to words, ntf-idf of words, norm of lyrics vector)
+#lyrics_vec_dict = red.hgetall('ntf_idf_lyrics_key')
+#lyrics_sparse = []
+#line_limit = 1000
+#counter = 0
+#for key in lyrics_vec_dict:
+#    # track_id: ([indeces], [tf-idf], vec_norm)
+#    aux_tuple = eval(lyrics_vec_dict[key])
+#    # (track_id, vec_norm, 4681, [indeces], [tf-idf]))
+#    lyrics_tuple = (key, aux_tuple[2], 4681, aux_tuple[0], aux_tuple[1])
+#    lyrics_sparse.append(lyrics_tuple)
+#    counter += 1
+#    if counter >= line_limit:
+#        break
 
 
-# Define auxiliary functions
+# Define functions to be called
 
-def cosine_similarity_old(sparse_vec):
-    # Input is sparse vector of tweet batch in form (4681, ([indeces], [tf]))
-    #   In format (ind, ntf-idf)
-    # Lyrics dictionary is in format track_id: ([indeces], [tf-idf], norm_of_vector)
-    lyrics = lyrics_broadcast.value
-    tracks = track_ids_broadcast.value
-    top_tracks = []
-    for track in tracks:
-        aux_dic = {}
-        aux_set = set()
-        lyric_vector = lyrics[track]
-        lyric_ind = lyric_vector[0]
-        lyric_val = lyric_vector[1]
-        lyric_norm = lyric_vector[2]
-        for item in lyric_ind:
-            aux_dic[lyric_ind] = lyric_val
-            aux_set.add(lyric_ind)
-        tweet_vec = sparse_vec.filter(lambda x: x[0] in aux_set)
-        if tweet_vec.isEmpty():
-            top_tracks.append((track, 0))
-            print((track, 0))
-        else:
-            dot_prod = tweet_vec.map(lambda x: x[1]*aux_dic[x[0]])
-            dot_prod = dot_prod.reduce(lambda x, y: x+y)
-            similarity = dot_prod.collect()/lyric_norm
-            print((track, similarity))
-            top_tracks.append((track, similarity))
-        
-    return sc.serialize(top_tracks)
+def raw_stream_to_words(input_stream):
+    """ Map incoming stream of twitter messages into a cleaned 
+    stream of words included in those messages.
+    The Dstream is kept as a Dstream all the time."""
+
+    # Tweet in json string as a second object of input tuple
+    raw_stream = input_stream.map(lambda x: json.loads(x[1]))
+
+    # Filter out messages with no text field
+    raw_stream = raw_stream.filter(lambda x: 'text' in x)
+
+    # Pick only "text" field and remove non-ascii characters
+    tweet = raw_stream.map(lambda x: x['text'].encode("utf-8","replace"))
+
+    # Remove links
+    tweet = tweet.map(lambda x: re.sub(r'http\S+', "", x))
+
+    # Split hashtags at camel case (OMITTED)
+
+    # Remove characters other than letters, ' and -
+    tweet = tweet.map(lambda x: re.sub(r'[^a-zA-Z\'\-\s]', "", x))
+
+    # Split the lines into words
+    tweet = tweet.flatMap(lambda x: x.split(" "))
+
+    # Remove empty strings
+    tweet = tweet.filter(lambda x: len(x) > 0)
+
+    # Lower case the words
+    tweet = tweet.map(lambda x: x.lower())
+
+    # Stem the words
+    tweet = tweet.map(lambda x: stem(x))
+
+    # Return the words
+    return tweet
 
 def sparse_norm(sparse_vector):
     vector_list = sparse_vector.collect()
@@ -96,39 +140,6 @@ def normalize_tf(tf_rdd):
     #ntf_idf_rdd = ntf_rdd.map(lambda x: (x[0], x[1]*log(query_count/(1+int(query_freq[x[0]])))))
     #return ntf_idf_rdd
 
-def raw_stream_to_words(input_stream):
-    # Tweet in json string as a second object of input tuple
-    raw_stream = input_stream.map(lambda x: json.loads(x[1]))
-
-    # Filter out messages with no text field
-    raw_stream = raw_stream.filter(lambda x: 'text' in x)
-
-    # Pick only "text" field and remove non-ascii characters
-    tweet = raw_stream.map(lambda x: x['text'].encode("utf-8","replace"))
-    
-    # Remove links
-    tweet = tweet.map(lambda x: re.sub(r'http\S+', "", x))
-
-    # Split hashtags at camel case (OMITTED)
-
-    # Remove characters other than letters, ' and -
-    tweet = tweet.map(lambda x: re.sub(r'[^a-zA-Z\'\-\s]', "", x))
-
-    # Split the lines into words
-    tweet = tweet.flatMap(lambda x: x.split(" "))
-
-    # Remove empty strings
-    tweet = tweet.filter(lambda x: len(x) > 0)
-
-    # Lower case the words
-    tweet = tweet.map(lambda x: x.lower())
-
-    # Stem the words
-    tweet = tweet.map(lambda x: stem(x))
-
-    # Return the words
-    return tweet
-
 def cosine_similarity(rdd):
     # The format of input rdd:
     # (1, ((4681, [tweet_indeces], [tweet_tf]), (track_id, track_norm, 4681, [track_indeces], [track_tf_idf])))
@@ -171,10 +182,13 @@ def words_to_redis(rdd):
 if __name__ == "__main__":
     
     if len(sys.argv) != 3:
-        print("Usage: kafka_spark_stream.py <zk> <topic>")
+        print("Usage: spark_streaming_process.py <zk> <topic>")
         exit(-1)
 
-    # Open strict connection to redis data store
+    # Get the password for Redis into redis_pw("password")
+    with open("redis_pw.json.nogit") as fh:
+        redis_pw = json.loads(fh.read())
+    # Open connection to Redis data base
     red = redis.StrictRedis(host='172.31.0.231', port=6379, db=0,
                             password=redis_pw["password"])
     # Get keys to the lyrics vectors as a list
@@ -200,7 +214,7 @@ if __name__ == "__main__":
     #  key=track_id, value=(indeces to words, ntf-idf of words, norm of lyrics vector)
     lyrics_vec_dict = red.hgetall('ntf_idf_lyrics_key')
     lyrics_sparse = []
-    line_limit = 10000
+    line_limit = 1000
     counter = 0
     for key in lyrics_vec_dict:
         # track_id: ([indeces], [tf-idf], vec_norm)
@@ -211,10 +225,9 @@ if __name__ == "__main__":
         counter += 1
         if counter >= line_limit:
             break
-    
 
     # Set the Spark context (connection to spark cluster, make RDDs)
-    sc = SparkContext(appName="KafkaTwitterStream")
+    sc = SparkContext(appName="TwitterStream")
     
     # Set Spark streaming context (connection to spark cluster, make Dstreams)
     batch_duration = 10  # Batch duration (s)
@@ -228,8 +241,8 @@ if __name__ == "__main__":
     # Set the Kafka topic
     #zkQuorum, topic = sys.argv[1:]  # hostname and Kafka topic
     #zkQuorum = "localhost::2181"
-    zkQuorum = "ec2-52-27-232-130.us-west-2.compute.amazonaws.com::2182"
-    topic = "twitter_test"
+    #zkQuorum = "ec2-52-27-232-130.us-west-2.compute.amazonaws.com::2182"
+    topic = "twitter_stream"
 
     # List the Kafka Brokers
     kafkaBrokers = {"metadata.broker.list": "ec2-52-27-232-130.us-west-2.compute.amazonaws.com:9092, ec2-54-70-124-67.us-west-2.compute.amazonaws.com:9092, ec2-54-70-110-215.us-west-2.compute.amazonaws.com:9092, ec2-54-70-81-69.us-west-2.compute.amazonaws.com:9092"}
@@ -237,72 +250,72 @@ if __name__ == "__main__":
     # Create input stream that pulls messages from Kafka Brokers
     # kvs is a DStream object
     kvs = KafkaUtils.createDirectStream(ssc, [topic], kafkaBrokers)
-    #kvs.pprint()
+    kvs.pprint()
     words = raw_stream_to_words(kvs)
 #    words.pprint()
 
     # Filter words not in the set of words used for bag-of-words
     words = words.filter(lambda x: x in word_set)
-#    words.pprint()
+    words.pprint()
 
     # Count the number of words in the batch of tweets
     pairs = words.map(lambda word: (word, 1))
     word_count = pairs.reduceByKey(lambda x, y: x + y)
-#    word_count.pprint()
+    word_count.pprint()
 
     # Search for the max term frequency, max_tf, from all term frequencies, tf
     tf = word_count.map(lambda x: x[1])
     max_tf = tf.reduce(lambda x, y: max(x, y))
-#    tf.pprint()
-#    max_tf.pprint()
+    tf.pprint()
+    max_tf.pprint()
 
     # Update historical query frequency and count
-    query_count += 1
+#    query_count += 1
     # query_freq OMITTED
 
     # Normalize the word counts
     ntf = word_count.transform(normalize_tf)
-#    ntf.pprint()
+    ntf.pprint()
     
 
     # Pick up n words with highest ntf-idf values (word, tf)
     top_words = ntf.transform(take_top_words)
     top_words = top_words.map(lambda x: (unstem[x[0]], x[1]))
-##    top_words.pprint()
+    top_words.pprint()
 
     # Transform the (word, weight) tuples into a sparse vector
     ntf_ind = ntf.map(lambda x: (int(word_index[x[0]]), x[1]))
-#    ntf_ind.pprint()
+    ntf_ind.pprint()
     tweet_vector = ntf_ind.transform(tuples_into_sparse)
     tweet_vector = tweet_vector.map(lambda x: (x[0], x[1][0], x[1][1]))
-#    tweet_vector.pprint()
+    tweet_vector.pprint()
 
     # Join the tweet vector dstream with the lyrics rdd
     # (1, ((4681, [tweet_indeces], [tweet_tf]), (track_id, track_norm, 4681, [track_indeces], [track_tf_idf])))
     tweet_and_lyrics = tweet_vector.transform(lambda rdd: rdd.map(lambda x: (1,x)).join(lyrics_rdd.map(lambda x: (1,x))))
-#    tweet_and_lyrics.pprint()
+    tweet_and_lyrics.pprint()
 
     # Calculate the cosine similarity and return n top matches
     cos_similarity = tweet_and_lyrics.transform(cosine_similarity)
-#    cos_similarity.pprint()
+    cos_similarity.pprint()
 
     # Take the top n of the matches
-    cos_sim_top = cos_similarity.transform(take_top)
+#    cos_sim_top = cos_similarity.transform(take_top)
 #    cos_sim_top.pprint()
     
 # Get track info in a dictionary, track_id is key, tuple of artist and song as value
     track_info = red.hgetall("track_info_key")
 
     # Get the lyric info of the top n songs ((artist, song), similarity)
-    top_songs = cos_sim_top.map(lambda x: (track_info[x[0]], x[1]))
+#    top_songs = cos_sim_top.map(lambda x: (track_info[x[0]], x[1]))
 ##    top_songs.pprint()
     
     # Write top songs and words to redis
     #top_to_redis = top_songs.collect()
     #red.set('top_songs_key', top_to_redis)
     #top_songs.transform(songs_to_redis)
-    top_songs.foreachRDD(songs_to_redis)
-    top_words.foreachRDD(words_to_redis)
+#    top_songs.foreachRDD(songs_to_redis)
+#    top_words.foreachRDD(words_to_redis)
     #print(type(top_words))
     #print(type(top_words.collect()))
     #red.set('top_word_key', top_words.collect())
