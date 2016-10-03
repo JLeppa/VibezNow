@@ -4,10 +4,7 @@ from __future__ import print_function
 import sys
 import re
 import redis
-#import json
 import simplejson as json
-#import riak
-#import pyspark_riak
 from stemming.porter2 import stem
 from math import log
 
@@ -203,7 +200,7 @@ if __name__ == "__main__":
     #  key=track_id, value=(indeces to words, ntf-idf of words, norm of lyrics vector)
     lyrics_vec_dict = red.hgetall('ntf_idf_lyrics_key')
     lyrics_sparse = []
-    line_limit = 50000
+    line_limit = 10000
     counter = 0
     for key in lyrics_vec_dict:
         # track_id: ([indeces], [tf-idf], vec_norm)
@@ -227,23 +224,6 @@ if __name__ == "__main__":
     #lyrics_broadcast = sc.broadcast(lyrics_sparse)
     lyrics_rdd = sc.parallelize(lyrics_sparse)
     track_ids_broadcast = sc.broadcast(lyrics_keys_small)
-
-    # Test putting some data into Riak
-    riak_test = 0
-    if riak_test:
-        # Patch SparkContext instance to enable Riak APIs
-        pyspark_riak.riak_context(sc)
-
-        # Test putting some data into Riak
-        test_data = [{"key1":{"t_key":"t_val1"}}, {"key2":{"t_key":"t_val2"}}]
-        test_rdd = sc.parallelize(test_data, 1)
-        test_rdd.saveToRiak("test-python-bucket", "default")
-        # Test reading from the bucket
-        rdd = sc.riakBucket("test-python-bucket", "default").queryAll()
-        test_data = rdd.collect()
-        values = map(lambda x: x[1], test_data)
-        for e in values:
-            print(e)
 
     # Set the Kafka topic
     #zkQuorum, topic = sys.argv[1:]  # hostname and Kafka topic
