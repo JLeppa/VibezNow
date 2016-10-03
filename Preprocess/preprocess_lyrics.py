@@ -4,79 +4,61 @@ import simplejson as json
 import redis
 from stemming.porter2 import stem
 
-# Open connection to Redis
-with open("redis_pw.json.nogit") as fh:
-    redis_pw = simplejson.loads(fh.read())
-red_con = redis.StrictRedis(host='172.31.0.231', port=6379, db=0,
-                        password=redis_pw["password"])
+""" Lyrics in musiXmatch data set are processed into bag-of-words vector
+using normalized term frequency and inverse document frequency with
+normalization factor 0.4. Bag-of-words vector contain 4681 words and there
+are 230789 lyrics  processed. The results are saved into a Redis database.
 
-# Save a test dictionary to redis
-#test_dict = {"tk": [1.23, 3.25, 8.12456], "tk2": [6.1324, 234.1, 34]}
-#red_con.hmset("test_dict_key", test_dict)
-#test_get = red_con.hgetall("test_dict_key")
-#print test_get
-#quit()
+It should be noted that some pre-preprocessing was conducted to get some
+of the values loaded from files in this script.
+"""
 
-# These two tracks are missing a song title: 
-#m1 = 'TRWEQAA128EF36407B'
-#m2 = 'TRJOMUD12903CED473'
-#missing_tracks = [m1, m2]
-
-
-# Load the idf values calculated later in the code
-file_m1 = open('idf.txt', 'r')
-idf_all = []
-for line in file_m1:
-    idf_value = re.sub(r'[\n\r]', "", line)
-    idf_all.append(float(idf_value))
-
-file_m1.close()
-#print len(idf_all)
-#quit()
-
-# Load a list of track_ids that are missing lyrics or song title
-file_0 = open('missing_lyrics.txt', 'r')
+# Load a list of track_ids that are missing lyrics or song title and
+#  save them into set "missing_tracks"
+file_1 = open('missing_lyrics.txt', 'r')
 missing_tracks = set()
-for line in file_0:
+for line in file_1:
     track = re.sub(r'[\n\r]', "", line)
     missing_tracks.add(track)
-#print missing_tracks
-file_0.close()
-#quit()
-
-# Load a list of stop words
-file_1 = open('stopwords.txt', 'r')
-# Make a set of stemmed stop words
-stopwords = set()
-for line in file_1:
-    word = re.sub(r'[\n\r]', "", line)
-    stopwords.add(stem(word))
 file_1.close()
 
-
-# Load the reverse mapping for stemmed words
-file_2 = open('mxm_reverse_mapping.txt', 'r') 
-# Read words and only keep ones without characters other than a-z and  
-words = {}  # dictionary with stemmed word as the key and unstemmed as value
-word_set = set()
+# Load a list of stop words, stem them, and save them into set "stopwords"
+file_2 = open('stopwords.txt', 'r')
+stopwords = set()
 for line in file_2:
+    word = re.sub(r'[\n\r]', "", line)
+    stopwords.add(stem(word))
+file_2.close()
+
+# Open connection to Redis
+with open("redis_pw.json.nogit") as fh:
+    redis_info = json.loads(fh.read())
+red = redis.StrictRedis(host=redis_info["host"], port=redis_info["port"], db=0,
+                        password=redis_info["password"])
+
+# Load idf values of lyrics and save them to list in order of bag-of-words vectors
+file_3 = open('lyrics_idf.txt', 'r')
+idf_all = []
+for line in file_3:
+    idf_value = re.sub(r'[\n\r]', "", line)
+    idf_all.append(float(idf_value))
+file_3.close()
+
+# Load reverse mapping for stemmed words, keep ones without characters other than a-z 
+#  and store them to dictionary with stemmed word as the key and unstemmed as value
+file_4 = open('mxm_reverse_mapping.txt', 'r')
+words = {}
+#word_set = set()
+for line in file_4:
     both = re.search(r'([^<]+)<SEP>(.+)', line)
     cleaned = re.sub(r'[^a-zA-Z\'\-\s]', "", both.group(1)) # Clean stemmed
     if len(both.group(1)) == len(cleaned) and cleaned not in stopwords:
-        word_set.add(cleaned)
+        #word_set.add(cleaned)
         words[cleaned] = both.group(2)
-file_2.close()
-unstem_to_redis = 0
-if unstem_to_redis:
-    red_con = redis.StrictRedis(host='172.31.0.231', port=6379, db=0, password='tamaonsalasanaredikselle')
-    red_con.hmset("unstem_key", words)
-    test_unstem = red_con.hgetall("unstem_key")
-    print test_unstem
-    print len(test_unstem)
-    quit()
+file_4.close()
 
-#print len(word_set)
-
+# Save the stemmed-unstemmed reverse mapping to Redis
+red.hmset("unstem_key", words)
 
 # Load the list of track_id, song_id, artist_name, song_title
 file_3 = open('unique_tracks.txt', 'r')
