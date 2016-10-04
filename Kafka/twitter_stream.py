@@ -57,7 +57,7 @@ def main():
                 continue
             else:
                 # Produce all messages to Kafka topic "twitter_stream"
-                producer_all.send('twitter_stream', tweet)
+                producer_all.send('twitter_stream_new', tweet)
                 # Produce messages that include word from the topic list to separate Kafka topics
                 json_tweet = simplejson.loads(tweet)
                 if 'text' in json_tweet:
@@ -68,6 +68,7 @@ def main():
                 msg_cnt += 1
                 if msg_cnt % 100 == 0:
                     print msg_cnt
+                #wait = raw_input("PRESS ENTER TO CONTINUE.")
     
     # Read tweets from a file and produce them
     if len(sys.argv) == 4:
