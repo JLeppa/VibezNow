@@ -14,10 +14,8 @@ from pyspark.streaming.kafka import KafkaUtils
 from pyspark.mllib.linalg import SparseVector
 
 
-def raw_stream_to_words(input_stream):
-    """ Map incoming stream of twitter messages into a cleaned 
-    stream of words included in those messages.
-    The Dstream is kept as a Dstream all the time."""
+def raw_stream_to_text(input_stream):
+    """ Map incoming raw kafka stream into text fields of tweets. """
 
     # Tweet in json string as a second object of input tuple
     raw_stream = input_stream.map(lambda x: json.loads(x[1]))
@@ -26,30 +24,35 @@ def raw_stream_to_words(input_stream):
     raw_stream = raw_stream.filter(lambda x: 'text' in x)
 
     # Pick only "text" field and remove non-ascii characters
-    tweet = raw_stream.map(lambda x: x['text'].encode("utf-8","replace"))
+    tweet_stream = raw_stream.map(lambda x: x['text'].encode("utf-8","replace"))
+
+    return tweet_stream
+
+def messages_to_words(tweets):
+    """ Map incoming stream of messages into collection of words. """
 
     # Remove links
-    tweet = tweet.map(lambda x: re.sub(r'http\S+', "", x))
+    tweets = tweets.map(lambda x: re.sub(r'http\S+', "", x))
 
     # Split hashtags at camel case (OMITTED)
 
     # Remove characters other than letters, ' and -
-    tweet = tweet.map(lambda x: re.sub(r'[^a-zA-Z\'\-\s]', "", x))
+    tweets = tweets.map(lambda x: re.sub(r'[^a-zA-Z\'\-\s]', "", x))
 
     # Split the lines into words
-    tweet = tweet.flatMap(lambda x: x.split(" "))
+    words = tweets.flatMap(lambda x: x.split(" "))
 
     # Remove empty strings
-    tweet = tweet.filter(lambda x: len(x) > 0)
+    words = words.filter(lambda x: len(x) > 0)
 
     # Lower case the words
-    tweet = tweet.map(lambda x: x.lower())
+    words = words.map(lambda x: x.lower())
 
     # Stem the words
-    tweet = tweet.map(lambda x: stem(x))
+    words = words.map(lambda x: stem(x))
 
     # Return the words
-    return tweet
+    return words
 
 def sparse_norm(sparse_vector):
     vector_list = sparse_vector.collect()
@@ -140,7 +143,7 @@ if __name__ == "__main__":
     track_info = red.hgetall("track_info_key")
 
     # Get the list of 4681 words in the order of ntf-idf vectors of lyrics
-    lyric_words = red.get('words_key')
+    lyric_words = red.get('words_key') # CHECK IF NEEDED
 
     # Get dictionary with stemmed word as key and unstemmed as value
     unstem = red.hgetall('unstem_key')
@@ -198,9 +201,15 @@ if __name__ == "__main__":
 
     # Create input stream that pull messages from Kafka Brokers (DStream object)
     tweets_raw = KafkaUtils.createDirectStream(ssc, [topic], kafkaBrokers)
-    tweets_raw.pprint()
-#    words = raw_stream_to_words(kvs)
-#    words.pprint()
+    #tweets_raw.pprint()
+
+    # Extract tweet text fields from the raw stream
+    tweets = raw_stream_to_text(tweets_raw)
+    tweets.pprint()
+
+    # Map tweet text fields to collections of words
+    words = messages_to_words(tweets)
+    words.pprint()
 
     # Filter words not in the set of words used for bag-of-words
 #    words = words.filter(lambda x: x in word_set)
