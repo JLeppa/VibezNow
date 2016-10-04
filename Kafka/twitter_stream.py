@@ -7,8 +7,7 @@ from requests_oauthlib import OAuth1
 from kafka import KafkaProducer
 
 def main():
-    """ Connect to twitter stream and send messages to kafka topics with one topic for all messages
-    and six separate topics for messages containing given word """
+    """ Connect to twitter stream and send all messages from US to kafka topic  """
 
     # Validate inline arguments
     if len(sys.argv) != 1 and len(sys.argv) != 4:
@@ -23,14 +22,7 @@ def main():
     ipfile.close()
     ips = ips.split(', ')
     
-    producer_all = KafkaProducer(bootstrap_servers=ips)
-    producer_topic = KafkaProducer(bootstrap_servers=ips)
-    topic_words = {'food':'twitter_word1', 
-                   'love':'twitter_word2',
-                   'relax':'twitter_word3',
-                   'shop':'twitter_word4',
-                   'sport':'twitter_word5', 
-                   'travel':'twitter_word6'}
+    producer = KafkaProducer(bootstrap_servers=ips)
 
     # Real-time stream from twitter api:
     if len(sys.argv) == 1:
@@ -56,15 +48,8 @@ def main():
             if not tweet:
                 continue
             else:
-                # Produce all messages to Kafka topic "twitter_stream"
-                producer_all.send('twitter_stream_new', tweet)
-                # Produce messages that include word from the topic list to separate Kafka topics
-                json_tweet = simplejson.loads(tweet)
-                if 'text' in json_tweet:
-                    message = json_tweet['text'].encode("utf-8","replace")
-                    for word in topic_words:
-                        if word in message:
-                            producer_topic.send(topic_words[word], tweet)
+                # Produce all messages to Kafka topic "twitter_stream_new"
+                producer.send('twitter_stream_new', tweet)
                 msg_cnt += 1
                 if msg_cnt % 100 == 0:
                     print msg_cnt
@@ -78,15 +63,8 @@ def main():
                 msg_cnt = 0
                 for line in fh:
                     tweet = line
-                    # Produce all messages to Kafka topic "twitter_stream"
-                    producer_all.send('twitter_stream', tweet)
-                    # Produce messages that include word from the topic list to separate Kafka topics
-                    json_tweet = simplejson.loads(tweet)
-                    if 'text' in json_tweet:
-                        message = json_tweet['text'].encode("utf-8","replace")
-                        for word in topic_words:
-                            if word in message:
-                                producer_topic.send(topic_words[word], tweet)
+                    # Produce all messages to Kafka topic "twitter_stream_new"
+                    producer.send('twitter_stream_new', tweet)
                     msg_cnt += 1
                     if msg_cnt % 1000 == 0:
                         print msg_cnt
