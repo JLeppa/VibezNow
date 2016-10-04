@@ -148,7 +148,7 @@ if __name__ == "__main__":
     # Get dictionary to connect words into their indeces in the bow vector
     word_index = red.hgetall('word_indeces_key')
 
-    # Get the non.ordered set of words
+    # Get the non-ordered set of words
     word_set = red.get('word_set_key')
     word_set = eval(word_set)
 
@@ -196,15 +196,9 @@ if __name__ == "__main__":
     broker_file.close()
     kafkaBrokers = {"metadata.broker.list": kafka_brokers}
 
-    # Create input stream that pulls messages from Kafka Brokers
-    # kvs is a DStream object
-    kvs = KafkaUtils.createDirectStream(ssc, [topic], kafkaBrokers)
-#    ipfile = open('ip_addresses.txt', 'r')
-#    ips = ipfile.read()[:-1]
-#    ipfile.close()
-#    ips = ips.split(', ')
-#    kvs = KafkaUtils.createDirectStream(ssc, [topic], {"bootstrap_servers": ips})
-    kvs.pprint()
+    # Create input stream that pull messages from Kafka Brokers (DStream object)
+    tweets_raw = KafkaUtils.createDirectStream(ssc, [topic], kafkaBrokers)
+    tweets_raw.pprint()
 #    words = raw_stream_to_words(kvs)
 #    words.pprint()
 
