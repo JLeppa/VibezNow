@@ -78,21 +78,15 @@ def word_count_to_ntf(tf_rdd):
     #ntf_idf_rdd = ntf_rdd.map(lambda x: (x[0], x[1]*log(query_count/(1+int(query_freq[x[0]])))))
     #return ntf_idf_rdd
 
-def word_count_to_ntf_DStream(word_count):
-    """ Incoming DStream of (word, count) pairs are mapped to (word, ntf) pairs,
-    where ntf = a+(1-a)*term_freq/max(term_freq). """
-    
-    nf = 0.4 # Normalization factor used when calculating normalized term frequency
-    
-    # Search for the max term frequency, max_tf, from all term frequencies, tf
-    tf = word_count.map(lambda x: x[1])
-    max_tf = tf.reduce(lambda x, y: max(x, y))
-
-    # Normalize the term frequencies
-    ntf = word_count.map(lambda x: (x[0], nf + (1-nf)*x[1]/max_tf))
-    
-    # Return the normalized term frequency
-    return ntf
+def take_top_words(rdd):
+    """ Take top n words with largest weights.
+    Input format: (word, word_tf) ; Output format: (unstemmed word, word_tf). """
+    n = 10
+    weight_values = rdd.map(lambda x: x[1])
+    top_n_val = weight_values.takeOrdered(n, key=lambda x: -x)
+    top_n = rdd.filter(lambda x: x[1] in top_n_val)
+    top_words = top_n.map(lambda x: (unstem_bc.value[x[0]], x[1]))
+    return top_words
 
 
 
@@ -127,14 +121,6 @@ def take_top(rdd):
     cos_values = rdd.map(lambda x: x[1])
     n = 5
     top_n_val = cos_values.takeOrdered(n, key=lambda x: -x)
-    top_n = rdd.filter(lambda x: x[1] in top_n_val)
-    return top_n
-
-def take_top_words(rdd):
-    # input format (word_index, word_tf)
-    weight_values = rdd.map(lambda x: x[1])
-    n = 8
-    top_n_val = weight_values.takeOrdered(n, key=lambda x: -x)
     top_n = rdd.filter(lambda x: x[1] in top_n_val)
     return top_n
 
@@ -212,8 +198,9 @@ if __name__ == "__main__":
     batch_duration = 10  # Batch duration (s)
     ssc = StreamingContext(sc, batch_duration)
 
-    # Broadcast word_set, lyrics to nodes
+    # Broadcast word_set, unstemming dictionary,  lyrics to nodes
     word_set_bc = sc.broadcast(word_set)
+    unstem_bc = sc.broadcast(unstem)
     #lyrics_broadcast = sc.broadcast(lyrics_sparse)
 #    lyrics_rdd = sc.parallelize(lyrics_sparse)
 #    track_ids_broadcast = sc.broadcast(lyrics_keys_small)
@@ -247,7 +234,6 @@ if __name__ == "__main__":
     word_count.pprint()
 
     # Calculate normalized term frequency, ntf
-    #ntf = word_count_to_ntf_DStream(word_count)
     ntf = word_count.transform(word_count_to_ntf)
     ntf.pprint()
 
@@ -256,9 +242,9 @@ if __name__ == "__main__":
     #query_freq OMITTED
 
     # Pick up n words with highest ntf-idf values (word, tf)
-#    top_words = ntf.transform(take_top_words)
+    top_words = ntf.transform(take_top_words)
 #    top_words = top_words.map(lambda x: (unstem[x[0]], x[1]))
-#    top_words.pprint()
+    top_words.pprint()
 
     # Transform the (word, weight) tuples into a sparse vector
 #    ntf_ind = ntf.map(lambda x: (int(word_index[x[0]]), x[1]))
