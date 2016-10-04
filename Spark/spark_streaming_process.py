@@ -88,13 +88,21 @@ def take_top_words(rdd):
     top_words = top_n.map(lambda x: (unstem_bc.value[x[0]], x[1]))
     return top_words
 
+def cosine_similarity(rdd):
+    """ Transform input RDD with (word_index, ntf_idf) tuples into sparse vector of length 4681,
+    calculate cosine similarity against all lyrics in tha data set,
+    and write top 10 matches into Redis db. """
 
+    lyrics = lyrics_bc.value
+    ind_rdd_sort = ind_rdd.sortByKey() # Sort tuples based on the word index for sparse vector format
+    ind_rdd_t = ind_rdd_sort.map(lambda x: (4681, x))
+    
+    # Sparse vector in (4681, [word_ind], [word_weight])
+    sparse_vec = ind_rdd_t.combineByKey(lambda value: ([value[0]], [value[1]]),
+                                        lambda x, value: (x[0]+[value[0]], x[1]+[value[1]]),
+                                        lambda x, y: (x[0]+y[0], x[1]+y[1]))
 
-def sparse_norm(sparse_vector):
-    vector_list = sparse_vector.collect()
-    sparse_vector = vector_list[0]
-    vector_norm = sparse_vector.norm(2)
-    return sc.parallelize([vector_norm])
+    # Loop through the lyrics to calculate cosine similarity
 
 def tuples_into_sparse(ind_rdd):
     # Input is RDD with (word_index, ntf_idf) tuples, output is a sparse vector of length 4681
@@ -179,6 +187,7 @@ if __name__ == "__main__":
     #  key=track_id, value=(indeces to words, ntf-idf of words, norm of lyrics vector)
     lyrics_vec_dict = red.hgetall('ntf_idf_lyrics_key')
     lyrics_sparse = []
+    lyrics_dict = {}
     line_limit = 1000
     counter = 0
     for key in lyrics_vec_dict:
@@ -187,6 +196,7 @@ if __name__ == "__main__":
         # (track_id, vec_norm, 4681, [indeces], [tf-idf]))
         lyrics_tuple = (key, aux_tuple[2], 4681, aux_tuple[0], aux_tuple[1])
         lyrics_sparse.append(lyrics_tuple)
+        lyrics_dict[key] = aux_tuple
         counter += 1
         if counter >= line_limit:
             break
@@ -201,6 +211,7 @@ if __name__ == "__main__":
     # Broadcast word_set, unstemming dictionary,  lyrics to nodes
     word_set_bc = sc.broadcast(word_set)
     unstem_bc = sc.broadcast(unstem)
+    lyrics_bc = sc.broadcast(lyrics_dict)
     #lyrics_broadcast = sc.broadcast(lyrics_sparse)
 #    lyrics_rdd = sc.parallelize(lyrics_sparse)
 #    track_ids_broadcast = sc.broadcast(lyrics_keys_small)
@@ -231,11 +242,11 @@ if __name__ == "__main__":
 
     # Map tweet text fields to collections of words and their counts
     word_count = messages_to_words(tweets)
-    word_count.pprint()
+    #word_count.pprint()
 
     # Calculate normalized term frequency, ntf
     ntf = word_count.transform(word_count_to_ntf)
-    ntf.pprint()
+    #ntf.pprint()
 
     # Update historical query frequency and count
     #query_count += 1
@@ -243,15 +254,14 @@ if __name__ == "__main__":
 
     # Pick up n words with highest ntf-idf values (word, tf)
     top_words = ntf.transform(take_top_words)
-#    top_words = top_words.map(lambda x: (unstem[x[0]], x[1]))
-    top_words.pprint()
+    #top_words.pprint()
 
     # Transform the (word, weight) tuples into a sparse vector
-#    ntf_ind = ntf.map(lambda x: (int(word_index[x[0]]), x[1]))
-#    ntf_ind.pprint()
-#    tweet_vector = ntf_ind.transform(tuples_into_sparse)
-#    tweet_vector = tweet_vector.map(lambda x: (x[0], x[1][0], x[1][1]))
-#    tweet_vector.pprint()
+    ntf_ind = ntf.map(lambda x: (int(word_index[x[0]]), x[1]))
+    ntf_ind.pprint()
+    tweet_vector = ntf_ind.transform(tuples_into_sparse)
+    tweet_vector = tweet_vector.map(lambda x: (x[0], x[1][0], x[1][1]))
+    tweet_vector.pprint()
 
     # Join the tweet vector dstream with the lyrics rdd
     # (1, ((4681, [tweet_indeces], [tweet_tf]), (track_id, track_norm, 4681, [track_indeces], [track_tf_idf])))
