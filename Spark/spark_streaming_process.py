@@ -179,7 +179,7 @@ def take_top(rdd):
     # input format (track_id, cos_similarity)
     #rdd = rdd.map(lambda x: (x[1], x[0]))
     cos_values = rdd.map(lambda x: x[1])
-    n = 5
+    n = 10
     top_n_val = cos_values.takeOrdered(n, key=lambda x: -x)
     top_n = rdd.filter(lambda x: x[1] in top_n_val)
     return top_n
@@ -239,7 +239,7 @@ if __name__ == "__main__":
     #  key=track_id, value=(indeces to words, ntf-idf of words, norm of lyrics vector)
     lyrics_vec_dict = red.hgetall('ntf_idf_lyrics_key')
     lyrics_dict = {}
-    line_limit = 50000
+    line_limit = 40000
     counter = 0
     for key in lyrics_vec_dict:
         # track_id: ([indeces], [tf-idf], vec_norm)
@@ -254,7 +254,7 @@ if __name__ == "__main__":
     sc = SparkContext(appName="TwitterStreaming")
     
     # Set Spark streaming context (connection to spark cluster, make Dstreams)
-    batch_duration = 10  # Batch duration (s)
+    batch_duration = 15  # Batch duration (s)
     ssc = StreamingContext(sc, batch_duration)
 
     # Broadcast word_set, unstemming dictionary,  lyrics to nodes
@@ -311,27 +311,25 @@ if __name__ == "__main__":
 #    cos_similarity.pprint()
 
     cosine_sim = cos_similarity.flatMap(lambda x: loop_lyrics(x))
-
-    cosine_sim.pprint()
-    #return cosine_sim
+#    cosine_sim.pprint()
 
     # Take the top n of the matches
-#    cos_sim_top = cos_similarity.transform(take_top)
+    cos_sim_top = cosine_sim.transform(take_top)
 #    cos_sim_top.pprint()
     
 # Get track info in a dictionary, track_id is key, tuple of artist and song as value
 #    track_info = red.hgetall("track_info_key")
 
     # Get the lyric info of the top n songs ((artist, song), similarity)
-#    top_songs = cos_sim_top.map(lambda x: (track_info[x[0]], x[1]))
-##    top_songs.pprint()
+    top_songs = cos_sim_top.map(lambda x: (track_info[x[0]], x[1]))
+    top_songs.pprint()
     
     # Write top songs and words to redis
     #top_to_redis = top_songs.collect()
     #red.set('top_songs_key', top_to_redis)
     #top_songs.transform(songs_to_redis)
-#    top_songs.foreachRDD(songs_to_redis)
-#    top_words.foreachRDD(words_to_redis)
+    top_songs.foreachRDD(songs_to_redis)
+    top_words.foreachRDD(words_to_redis)
     #print(type(top_words))
     #print(type(top_words.collect()))
     #red.set('top_word_key', top_words.collect())
