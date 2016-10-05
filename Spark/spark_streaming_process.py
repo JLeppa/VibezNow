@@ -7,6 +7,7 @@ import redis
 import simplejson as json
 from stemming.porter2 import stem
 from math import log
+from operator import itemgetter
 
 from pyspark import SparkContext
 from pyspark.streaming import StreamingContext
@@ -109,26 +110,51 @@ def cosine_similarity(ind_rdd):
     tweet_vector = sparse_vec.map(lambda x: SparseVector(x[0], x[1][0], x[1][1]))
     tweet_vector_norm = tweet_vector.map(lambda x: (x, x.norm(2)))
 
-    # Loop through the lyrics to find highest cosine similarity
-    for track in lyrics:
-        track_id = track
-    print(track_id)
-    lyrics_vec_norm = lyrics[track_id]
-    print(lyrics_vec_norm)
-    cosine_sim = tweet_vector_norm.map(lambda x: x[0].dot(lyrics_vec_norm[0])/lyrics_vec_norm[1]/x[1])
-        #cosine_sim.pprint()
-        #cosine_sim.take(1)
-    print(type(cosine_sim))
-        #print(cosine_sim)
-    #print(sparse_vector)
-    # Loop through the lyrics to calculate cosine similarity
+    # Loop through the lyrics to find highest n cosine similarities
+    #cosine_sim = tweet_vector_norm.flatmap(loop_lyrics)
+    #print(type(cosine_sim))
+    #print(cosine_sim.take(1)[0])
+    #n = 10
+    #cs_min = 0
+    #top_list = []
+    #counter = 0
     #for track in lyrics:
-    return cosine_sim
-    #return "jks"
-    #print(type(ind_rdd))
-    #return sparse_vec
-    #return tweet_vector
+    #    counter += 1
+    #    lyrics_vec_norm = lyrics[track]
+    #    cosine_sim = tweet_vector_norm.map(lambda x: (track, x[0].dot(lyrics_vec_norm[0])/lyrics_vec_norm[1]/x[1]))
+    #    if counter <= n:
+    #        top_list.append(cosine_sim.take(1)[0])
+    #        if counter == n:
+    #            top_list = sorted(top_list, key=lambda tup: tup[1], reverse=True)
+    #            print(top_list)
+        #test = cosine_sim.take(1)[0]
+        #print(type(test))
+        #print(test)
+    #print(type(cosine_sim))
+    #return cosine_sim
+    return tweet_vector_norm
     #return ind_rdd
+
+
+def loop_lyrics(tweet_vector_norm):
+    lyrics = lyrics_bc.value
+    #n = 10
+    #cs_min = 0
+    top_list = []
+    #counter = 0
+    for track in lyrics:
+        #counter += 1
+        lyrics_vec_norm = lyrics[track]
+#        cosine_sim = tweet_vector_norm.map(lambda x: (track, x[0].dot(lyrics_vec_norm[0])/lyrics_vec_norm[1]/x[1]))
+        cosine_sim = (track, tweet_vector_norm[0].dot(lyrics_vec_norm[0])/lyrics_vec_norm[1]/tweet_vector_norm[1])
+        top_list.append(cosine_sim)
+        #if counter <= n:
+        #    top_list.append(cosine_sim)
+            #if counter == n:
+            #    top_list = sorted(top_list, key=lambda tup: tup[1], reverse=True)
+                #print(top_list)
+    return top_list
+
 
 def tuples_into_sparse(ind_rdd):
     # Input is RDD with (word_index, ntf_idf) tuples, output is a sparse vector of length 4681
@@ -212,19 +238,14 @@ if __name__ == "__main__":
     # Get the lyrics of 237642 songs as sparse bag of words
     #  key=track_id, value=(indeces to words, ntf-idf of words, norm of lyrics vector)
     lyrics_vec_dict = red.hgetall('ntf_idf_lyrics_key')
-    lyrics_sparse = []
     lyrics_dict = {}
-    line_limit = 3
+    line_limit = 50000
     counter = 0
     for key in lyrics_vec_dict:
         # track_id: ([indeces], [tf-idf], vec_norm)
         aux_tuple = eval(lyrics_vec_dict[key])
-        # (track_id, vec_norm, 4681, [indeces], [tf-idf]))
-        lyrics_tuple = (key, aux_tuple[2], 4681, aux_tuple[0], aux_tuple[1])
-        lyrics_sparse.append(lyrics_tuple)
         lyrics_vec = SparseVector(4681, aux_tuple[0], aux_tuple[1])
         lyrics_dict[key] = (lyrics_vec, aux_tuple[2])
-        #lyrics_dict[key] = aux_tuple
         counter += 1
         if counter >= line_limit:
             break
@@ -240,9 +261,6 @@ if __name__ == "__main__":
     word_set_bc = sc.broadcast(word_set)
     unstem_bc = sc.broadcast(unstem)
     lyrics_bc = sc.broadcast(lyrics_dict)
-    #lyrics_broadcast = sc.broadcast(lyrics_sparse)
-#    lyrics_rdd = sc.parallelize(lyrics_sparse)
-#    track_ids_broadcast = sc.broadcast(lyrics_keys_small)
 
     # Set the Kafka topic
     topic = "twitter_stream_new"
@@ -286,11 +304,16 @@ if __name__ == "__main__":
 
     # Map the (word, weight) tuples into (word_index, weight) tuples
     ntf_ind = ntf.map(lambda x: (int(word_index[x[0]]), x[1]))
-    ntf_ind.pprint()
+#    ntf_ind.pprint()
 
     # Calculate the cosine similarity and return n top matches
     cos_similarity = ntf_ind.transform(cosine_similarity)
-    cos_similarity.pprint()
+#    cos_similarity.pprint()
+
+    cosine_sim = cos_similarity.flatMap(lambda x: loop_lyrics(x))
+
+    cosine_sim.pprint()
+    #return cosine_sim
 
     # Take the top n of the matches
 #    cos_sim_top = cos_similarity.transform(take_top)
