@@ -16,6 +16,8 @@ stopwords.txt
 
 Files mxm_dataset_test.txt, mxm_dataset_train.txt, mxm_reverse_mapping.txt
 can be obtained at http://labrosa.ee.columbia.edu/millionsong/musixmatch
+and unique_tracks.txt at
+http://labrosa.ee.columbia.edu/millionsong/pages/getting-dataset.
 """
 
 # Load a list of track_ids that are missing lyrics or song title and
