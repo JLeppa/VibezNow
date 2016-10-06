@@ -92,20 +92,23 @@ def take_top_words(rdd):
 def tuples_to_sparse(ind_rdd):
     """ Transform input RDD with (word_index, ntf_idf) tuples into sparse vector of length 4681. """
 
-    ind_rdd_sort = ind_rdd.sortByKey() # Sort tuples based on the word index for sparse vector format
-    ind_rdd_t = ind_rdd_sort.map(lambda x: (4681, x))
+    ind_rdd = ind_rdd.sortByKey() # Sort tuples based on the word index for sparse vector format
+    ind_rdd_t = ind_rdd.map(lambda x: (4681, x))
     
     # Sparse vector, (4681, [word_ind], [word_weight]), into mllib.SparseVector
-    #sparse_vec = ind_rdd_t.combineByKey(lambda value: ([value[0]], [value[1]]),
-    #                                    lambda x, value: (x[0]+[value[0]], x[1]+[value[1]]),
-    #                                    lambda x, y: (x[0]+y[0], x[1]+y[1]))
     sparse_vec = ind_rdd_t.combineByKey(lambda value: ([value[0]], [value[1]]),
-                                        sorting_value_merger,
+                                        simple_value_merger,
                                         sorting_merger_combiner)
     tweet_vector = sparse_vec.map(lambda x: SparseVector(x[0], x[1][0], x[1][1]))
     tweet_vector_norm = tweet_vector.map(lambda x: (x, x.norm(2)))
 
     return tweet_vector_norm
+
+def simple_value_merger(lists_in, val):
+    """ Input is a tuple of lists and tuple of values that are added to the lists. """
+    lists_in[0].append(val[0])
+    lists_in[1].append(val[1])
+    return lists_in
 
 def sorting_value_merger(lists_in, val):
     """ Input is a tuple of lists and tuple of values that are added to the lists maintaining the order
@@ -216,7 +219,7 @@ if __name__ == "__main__":
     #  key=track_id, value=(indeces to words, ntf-idf of words, norm of lyrics vector)
     lyrics_vec_dict = red.hgetall('ntf_idf_lyrics_key')
     lyrics_dict = {}
-    line_limit = 1000
+    line_limit = 10000
     counter = 0
     for key in lyrics_vec_dict:
         # track_id: ([indeces], [tf-idf], vec_norm)
