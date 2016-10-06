@@ -135,13 +135,23 @@ def loop_lyrics(tweet_vector_norm):
     """ Loop through the lyrics to calculate cosine similarity against each of them.
     Return tuples (track_id, cosine_similarity_value). """
     lyrics = lyrics_bc.value
+    top_list = []
+    for track in lyrics:
+        lyrics_vec_norm = lyrics[track]
+        cosine_sim = (track, tweet_vector_norm[0].dot(lyrics_vec_norm[0])/lyrics_vec_norm[1]/tweet_vector_norm[1])
+        top_list.append(cosine_sim)
+    return top_list
+
+def loop_lyrics_ordered(tweet_vector_norm):
+    """ Loop through the lyrics to calculate cosine similarity against each of them.
+    Return tuples (track_id, cosine_similarity_value) of top n similarity. """
+    lyrics = lyrics_bc.value
     n = 10
     top_list = []
     counter = 0
     for track in lyrics:
         counter += 1
         lyrics_vec_norm = lyrics[track]
-#        cosine_sim = tweet_vector_norm.map(lambda x: (track, x[0].dot(lyrics_vec_norm[0])/lyrics_vec_norm[1]/x[1]))
         cosine_sim = (track, tweet_vector_norm[0].dot(lyrics_vec_norm[0])/lyrics_vec_norm[1]/tweet_vector_norm[1])
         if counter <= n:
             top_list.append(cosine_sim)
@@ -290,13 +300,12 @@ if __name__ == "__main__":
     tweet_sparse_norm = ntf_ind.transform(tuples_to_sparse)
     #tweet_sparse_norm.pprint()
 
-    # Calculate the cosine similarity and return (track_id, similarity) tuples
+    # Calculate the cosine similarity, return (track_id, similarity) tuples
+    #  and get top ten suggestions
+    #lyrics_similarity = tweet_sparse_norm.flatMap(lambda x: loop_lyrics_ordered(x))
     lyrics_similarity = tweet_sparse_norm.flatMap(lambda x: loop_lyrics(x))
+    lyrics_similarity = lyrics_similarity.transform(take_top)
     #lyrics_similarity.pprint()
-
-    # Take the top n of the matches
-#    cos_sim_top = lyrics_similarity.transform(take_top)
-#    cos_sim_top.pprint()
 
     # Get the lyric info of the top n songs ((artist, song), similarity)
     #top_songs = cos_sim_top.map(lambda x: (track_info[x[0]], x[1]))
