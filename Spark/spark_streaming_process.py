@@ -177,14 +177,26 @@ def take_top(rdd):
 
 def songs_to_redis(rdd):
     top_to_redis = rdd.collect()
-    #print(type(top_to_redis))
-    #print(top_to_redis)
     red.set('top_songs_key', top_to_redis)
+
+def songs_to_redis_w1(rdd):
+    top_to_redis = rdd.collect()
+    red.set('top_songs_w1_key', top_to_redis)
+
+def songs_to_redis_w2(rdd):
+    top_to_redis = rdd.collect()
+    red.set('top_songs_w2_key', top_to_redis)
+
+def songs_to_redis_w3(rdd):
+    top_to_redis = rdd.collect()
+    red.set('top_songs_w3_key', top_to_redis)
+
+def songs_to_redis_w4(rdd):
+    top_to_redis = rdd.collect()
+    red.set('top_songs_w4_key', top_to_redis)
 
 def words_to_redis(rdd):
     top_to_redis = rdd.collect()
-    #print(type(top_to_redis))
-    #print(top_to_redis)
     red.set('top_words_key', top_to_redis)
 
 
@@ -229,7 +241,7 @@ if __name__ == "__main__":
     #  key=track_id, value=(indeces to words, ntf-idf of words, norm of lyrics vector)
     lyrics_vec_dict = red.hgetall('ntf_idf_lyrics_key')
     lyrics_dict = {}
-    line_limit = 30000
+    line_limit = 100000
     counter = 0
     for key in lyrics_vec_dict:
         # track_id: ([indeces], [tf-idf], vec_norm)
@@ -244,7 +256,7 @@ if __name__ == "__main__":
     sc = SparkContext(appName="TwitterStreaming")
     
     # Set Spark streaming context (connection to spark cluster, make Dstreams)
-    batch_duration = 60  # Batch duration (s)
+    batch_duration = 120  # Batch duration (s)
     ssc = StreamingContext(sc, batch_duration)
 
     # Broadcast word_set, unstemming dictionary,  lyrics to nodes
@@ -346,15 +358,21 @@ if __name__ == "__main__":
     top_songs_w2 = lyrics_similarity_w2.map(lambda x: (track_info[x[0]], x[1]))
     top_songs_w3 = lyrics_similarity_w3.map(lambda x: (track_info[x[0]], x[1]))
     top_songs_w4 = lyrics_similarity_w4.map(lambda x: (track_info[x[0]], x[1]))
-    top_songs.pprint()
-    top_songs_w1.pprint()
-    top_songs_w2.pprint()
-    top_songs_w3.pprint()
-    top_songs_w4.pprint()
+    #top_songs.pprint()
+    #top_songs_w1.pprint()
+    #top_songs_w2.pprint()
+    #top_songs_w3.pprint()
+    #top_songs_w4.pprint()
     
     # Write top songs and words to redis
     top_songs.foreachRDD(songs_to_redis)
+    top_songs_w1.foreachRDD(songs_to_redis_w1)
+    top_songs_w2.foreachRDD(songs_to_redis_w2)
+    top_songs_w3.foreachRDD(songs_to_redis_w3)
+    top_songs_w4.foreachRDD(songs_to_redis_w4)
     top_words.foreachRDD(words_to_redis)
+    #top_to_redis = rdd.collect()
+    #red.set('top_songs_key', top_to_redis)
 
     ssc.start()
     ssc.awaitTermination()
