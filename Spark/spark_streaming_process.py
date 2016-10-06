@@ -92,11 +92,6 @@ def take_top_words(rdd):
 def tuples_to_sparse(ind_rdd):
     """ Transform input RDD with (word_index, ntf_idf) tuples into sparse vector of length 4681. """
 
-#    tweet_vector = ind_rdd.sortByKey().map(lambda x: (4681, x)).combineByKey(lambda value: ([value[0]], [value[1]]),
-#                                        lambda x, value: (x[0]+[value[0]], x[1]+[value[1]]),
-#                                        lambda x, y: (x[0]+y[0], x[1]+y[1])).map(lambda x: SparseVector(x[0], x[1][0], x[1][1]))
-
-    #ind_rdd = ind_rdd.coalesce(1) # Bring everything two one partition to avoid indexing issues with SparseVector operation
     ind_rdd_sort = ind_rdd.sortByKey() # Sort tuples based on the word index for sparse vector format
     ind_rdd_t = ind_rdd_sort.map(lambda x: (4681, x))
     
@@ -138,7 +133,6 @@ def loop_lyrics(tweet_vector_norm):
     Return tuples (track_id, cosine_similarity_value). """
     lyrics = lyrics_bc.value
     n = 10
-    cs_min = 0
     top_list = []
     counter = 0
     for track in lyrics:
@@ -146,24 +140,18 @@ def loop_lyrics(tweet_vector_norm):
         lyrics_vec_norm = lyrics[track]
 #        cosine_sim = tweet_vector_norm.map(lambda x: (track, x[0].dot(lyrics_vec_norm[0])/lyrics_vec_norm[1]/x[1]))
         cosine_sim = (track, tweet_vector_norm[0].dot(lyrics_vec_norm[0])/lyrics_vec_norm[1]/tweet_vector_norm[1])
-        #top_list.append(cosine_sim)
         if counter <= n:
             top_list.append(cosine_sim)
             if counter == n:
                 top_list = sorted(top_list, key=lambda tup: tup[1], reverse=True)
-                
-                #print(top_list)
+                cs_min = top_list[-1][1]
+        else:
+            if cosine_sim[1] > cs_min:
+                top_list.pop
+                top_list.append(cosine_sim)
+                top_list = sorted(top_list, key=lambda tup: tup[1], reverse=True)
+                cs_min = top_list[-1][1]
     return top_list
-
-def cosine_similarity_old(rdd):
-    # The format of input rdd:
-    # (1, ((4681, [tweet_indeces], [tweet_tf]), (track_id, track_norm, 4681, [track_indeces], [track_tf_idf])))
-    #tweet_norm = rdd.map(lambda x: SparseVector(x[1][0][0], x[1][0][1], x[1][0][2]).norm(2)) #Norm of tweet
-    cos_sim = rdd.map(lambda x: (x[1][1][0], 
-                                 SparseVector(x[1][0][0], x[1][0][1], x[1][0][2])\
-                                 .dot(SparseVector(x[1][1][2], x[1][1][3], x[1][1][4]))/\
-                                 SparseVector(x[1][0][0], x[1][0][1], x[1][0][2]).norm(2)/x[1][1][1]))
-    return cos_sim
 
 def take_top(rdd):
     # input format (track_id, cos_similarity)
@@ -185,7 +173,6 @@ def words_to_redis(rdd):
     #print(type(top_to_redis))
     #print(top_to_redis)
     red.set('top_words_key', top_to_redis)
-
 
 
 if __name__ == "__main__":
@@ -294,28 +281,28 @@ if __name__ == "__main__":
 
     # Map the (word, weight) tuples into (word_index, weight) tuples
     ntf_ind = ntf.map(lambda x: (int(word_index[x[0]]), x[1]))
-    ntf_ind.pprint()
+    #ntf_ind.pprint()
 
     # Get tuples into driver and convert them into sparse vector
-#    ntf_ind.repartition(1)
     tweet_sparse_norm = ntf_ind.transform(tuples_to_sparse)
-    tweet_sparse_norm.pprint()
+    #tweet_sparse_norm.pprint()
 
     # Calculate the cosine similarity and return (track_id, similarity) tuples
-#    lyrics_similarity = tweet_sparse_norm.flatMap(lambda x: loop_lyrics(x))
-#    lyrics_similarity.pprint()
+    lyrics_similarity = tweet_sparse_norm.flatMap(lambda x: loop_lyrics(x))
+    #lyrics_similarity.pprint()
 
     # Take the top n of the matches
 #    cos_sim_top = lyrics_similarity.transform(take_top)
 #    cos_sim_top.pprint()
 
     # Get the lyric info of the top n songs ((artist, song), similarity)
-#    top_songs = cos_sim_top.map(lambda x: (track_info[x[0]], x[1]))
-#    top_songs.pprint()
+    #top_songs = cos_sim_top.map(lambda x: (track_info[x[0]], x[1]))
+    top_songs = lyrics_similarity.map(lambda x: (track_info[x[0]], x[1]))
+    #top_songs.pprint()
     
     # Write top songs and words to redis
-#    top_songs.foreachRDD(songs_to_redis)
-#    top_words.foreachRDD(words_to_redis)
+    top_songs.foreachRDD(songs_to_redis)
+    top_words.foreachRDD(words_to_redis)
 
     ssc.start()
     ssc.awaitTermination()
