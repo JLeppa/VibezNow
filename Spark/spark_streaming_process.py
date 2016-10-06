@@ -229,7 +229,7 @@ if __name__ == "__main__":
     #  key=track_id, value=(indeces to words, ntf-idf of words, norm of lyrics vector)
     lyrics_vec_dict = red.hgetall('ntf_idf_lyrics_key')
     lyrics_dict = {}
-    line_limit = 10000
+    line_limit = 30000
     counter = 0
     for key in lyrics_vec_dict:
         # track_id: ([indeces], [tf-idf], vec_norm)
@@ -244,7 +244,7 @@ if __name__ == "__main__":
     sc = SparkContext(appName="TwitterStreaming")
     
     # Set Spark streaming context (connection to spark cluster, make Dstreams)
-    batch_duration = 15  # Batch duration (s)
+    batch_duration = 60  # Batch duration (s)
     ssc = StreamingContext(sc, batch_duration)
 
     # Broadcast word_set, unstemming dictionary,  lyrics to nodes
@@ -270,18 +270,31 @@ if __name__ == "__main__":
     #tweets.pprint()
 
     # Filter from stream messages that contain theme word
-    #theme_words = ['food', 'love', 'relax', 'shop', 'sport', 'travel']
-    #tweets_w1 = tweets.filter(lambda x: theme_words[0] in x)
-    #tweets_w2 = tweets.filter(lambda x: theme_words[1] in x)
+    theme_words = ['food', 'love', 'shop', 'sport']
+    tweets_w1 = tweets.filter(lambda x: theme_words[0] in x)
+    tweets_w2 = tweets.filter(lambda x: theme_words[1] in x)
+    tweets_w3 = tweets.filter(lambda x: theme_words[2] in x)
+    tweets_w4 = tweets.filter(lambda x: theme_words[3] in x)
+    
     #tweets_w1.pprint()
     #tweets_w2.pprint()
+    #tweets_w3.pprint()
+    #tweets_w4.pprint()
 
     # Map tweet text fields to collections of words and their counts
     word_count = messages_to_words(tweets)
+    word_count_w1 = messages_to_words(tweets_w1)
+    word_count_w2 = messages_to_words(tweets_w2)
+    word_count_w3 = messages_to_words(tweets_w3)
+    word_count_w4 = messages_to_words(tweets_w4)
     #word_count.pprint()
 
     # Calculate normalized term frequency, ntf
     ntf = word_count.transform(word_count_to_ntf)
+    ntf_w1 = word_count_w1.transform(word_count_to_ntf)
+    ntf_w2 = word_count_w2.transform(word_count_to_ntf)
+    ntf_w3 = word_count_w3.transform(word_count_to_ntf)
+    ntf_w4 = word_count_w4.transform(word_count_to_ntf)
     #ntf.pprint()
 
     # Update historical query frequency and count
@@ -290,14 +303,26 @@ if __name__ == "__main__":
 
     # Pick up n words with highest ntf-idf values (word, tf)
     top_words = ntf.transform(take_top_words)
+    top_words_w1 = ntf_w1.transform(take_top_words)
+    top_words_w2 = ntf_w2.transform(take_top_words)
+    top_words_w3 = ntf_w3.transform(take_top_words)
+    top_words_w4 = ntf_w4.transform(take_top_words)
     #top_words.pprint()
 
     # Map the (word, weight) tuples into (word_index, weight) tuples
     ntf_ind = ntf.map(lambda x: (int(word_index[x[0]]), x[1]))
+    ntf_ind_w1 = ntf_w1.map(lambda x: (int(word_index[x[0]]), x[1]))
+    ntf_ind_w2 = ntf_w2.map(lambda x: (int(word_index[x[0]]), x[1]))
+    ntf_ind_w3 = ntf_w3.map(lambda x: (int(word_index[x[0]]), x[1]))
+    ntf_ind_w4 = ntf_w4.map(lambda x: (int(word_index[x[0]]), x[1]))
     #ntf_ind.pprint()
 
-    # Get tuples into driver and convert them into sparse vector
+    # Convert tuples into sparse vector
     tweet_sparse_norm = ntf_ind.transform(tuples_to_sparse)
+    tweet_sparse_norm_w1 = ntf_ind_w1.transform(tuples_to_sparse)
+    tweet_sparse_norm_w2 = ntf_ind_w2.transform(tuples_to_sparse)
+    tweet_sparse_norm_w3 = ntf_ind_w3.transform(tuples_to_sparse)
+    tweet_sparse_norm_w4 = ntf_ind_w4.transform(tuples_to_sparse)
     #tweet_sparse_norm.pprint()
 
     # Calculate the cosine similarity, return (track_id, similarity) tuples
@@ -305,12 +330,27 @@ if __name__ == "__main__":
     #lyrics_similarity = tweet_sparse_norm.flatMap(lambda x: loop_lyrics_ordered(x))
     lyrics_similarity = tweet_sparse_norm.flatMap(lambda x: loop_lyrics(x))
     lyrics_similarity = lyrics_similarity.transform(take_top)
+    lyrics_similarity_w1 = tweet_sparse_norm_w1.flatMap(lambda x: loop_lyrics(x))
+    lyrics_similarity_w1 = lyrics_similarity_w1.transform(take_top)
+    lyrics_similarity_w2 = tweet_sparse_norm_w2.flatMap(lambda x: loop_lyrics(x))
+    lyrics_similarity_w2 = lyrics_similarity_w2.transform(take_top)
+    lyrics_similarity_w3 = tweet_sparse_norm_w3.flatMap(lambda x: loop_lyrics(x))
+    lyrics_similarity_w3 = lyrics_similarity_w3.transform(take_top)
+    lyrics_similarity_w4 = tweet_sparse_norm_w4.flatMap(lambda x: loop_lyrics(x))
+    lyrics_similarity_w4 = lyrics_similarity_w4.transform(take_top)
     #lyrics_similarity.pprint()
 
     # Get the lyric info of the top n songs ((artist, song), similarity)
-    #top_songs = cos_sim_top.map(lambda x: (track_info[x[0]], x[1]))
     top_songs = lyrics_similarity.map(lambda x: (track_info[x[0]], x[1]))
-    #top_songs.pprint()
+    top_songs_w1 = lyrics_similarity_w1.map(lambda x: (track_info[x[0]], x[1]))
+    top_songs_w2 = lyrics_similarity_w2.map(lambda x: (track_info[x[0]], x[1]))
+    top_songs_w3 = lyrics_similarity_w3.map(lambda x: (track_info[x[0]], x[1]))
+    top_songs_w4 = lyrics_similarity_w4.map(lambda x: (track_info[x[0]], x[1]))
+    top_songs.pprint()
+    top_songs_w1.pprint()
+    top_songs_w2.pprint()
+    top_songs_w3.pprint()
+    top_songs_w4.pprint()
     
     # Write top songs and words to redis
     top_songs.foreachRDD(songs_to_redis)
