@@ -96,18 +96,42 @@ def tuples_to_sparse(ind_rdd):
 #                                        lambda x, value: (x[0]+[value[0]], x[1]+[value[1]]),
 #                                        lambda x, y: (x[0]+y[0], x[1]+y[1])).map(lambda x: SparseVector(x[0], x[1][0], x[1][1]))
 
-    ind_rdd = ind_rdd.coalesce(1) # Bring everything two one partition to avoid indexing issues with SparseVector operation
+    #ind_rdd = ind_rdd.coalesce(1) # Bring everything two one partition to avoid indexing issues with SparseVector operation
     ind_rdd_sort = ind_rdd.sortByKey() # Sort tuples based on the word index for sparse vector format
     ind_rdd_t = ind_rdd_sort.map(lambda x: (4681, x))
     
     # Sparse vector, (4681, [word_ind], [word_weight]), into mllib.SparseVector
+    #sparse_vec = ind_rdd_t.combineByKey(lambda value: ([value[0]], [value[1]]),
+    #                                    lambda x, value: (x[0]+[value[0]], x[1]+[value[1]]),
+    #                                    lambda x, y: (x[0]+y[0], x[1]+y[1]))
     sparse_vec = ind_rdd_t.combineByKey(lambda value: ([value[0]], [value[1]]),
-                                        lambda x, value: (x[0]+[value[0]], x[1]+[value[1]]),
-                                        lambda x, y: (x[0]+y[0], x[1]+y[1]))
+                                        sorting_value_merger,
+                                        sorting_merger_combiner)
     tweet_vector = sparse_vec.map(lambda x: SparseVector(x[0], x[1][0], x[1][1]))
     tweet_vector_norm = tweet_vector.map(lambda x: (x, x.norm(2)))
 
     return tweet_vector_norm
+
+def sorting_value_merger(lists_in, val):
+    """ Input is a tuple of lists and tuple of values that are added to the lists maintaining the order
+    sorted based on the values of the first list. """
+    if lists_in[0][-1] < val[0]:
+        lists_in[0].append(val[0])
+        lists_in[1].append(val[1])
+    else:
+        for x in range(len(lists_in[0])):
+            if lists_in[0][x] > val[0]:
+                lists_in[0].insert(x, val[0])
+                lists_in[1].insert(x, val[1])
+    return lists_in
+
+def sorting_merger_combiner(list1, list2):
+    """ Inputs are tuples of lists with sorted indeces in the first list. """
+    if list1[0][0] < list2[1][0]:
+        list_both = list1 + list2
+    else:
+        list_both = list2 + list1
+    return list_both
 
 def loop_lyrics(tweet_vector_norm):
     """ Loop through the lyrics to calculate cosine similarity against each of them.
@@ -205,7 +229,7 @@ if __name__ == "__main__":
     #  key=track_id, value=(indeces to words, ntf-idf of words, norm of lyrics vector)
     lyrics_vec_dict = red.hgetall('ntf_idf_lyrics_key')
     lyrics_dict = {}
-    line_limit = 20000
+    line_limit = 1000
     counter = 0
     for key in lyrics_vec_dict:
         # track_id: ([indeces], [tf-idf], vec_norm)
@@ -274,7 +298,8 @@ if __name__ == "__main__":
 
     # Get tuples into driver and convert them into sparse vector
 #    ntf_ind.repartition(1)
-#    tweet_sparse_norm = ntf_ind.transform(tuples_to_sparse)
+    tweet_sparse_norm = ntf_ind.transform(tuples_to_sparse)
+    tweet_sparse_norm.pprint()
 
     # Calculate the cosine similarity and return (track_id, similarity) tuples
 #    lyrics_similarity = tweet_sparse_norm.flatMap(lambda x: loop_lyrics(x))
