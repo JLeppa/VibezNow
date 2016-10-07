@@ -35,8 +35,6 @@ def messages_to_words(tweets):
     # Remove links
     tweets = tweets.map(lambda x: re.sub(r'http\S+', "", x))
 
-    # Split hashtags at camel case (OMITTED)
-
     # Remove characters other than letters, ' and -
     tweets = tweets.map(lambda x: re.sub(r'[^a-zA-Z\'\-\s]', "", x))
 
@@ -199,6 +197,22 @@ def words_to_redis(rdd):
     top_to_redis = rdd.collect()
     red.set('top_words_key', top_to_redis)
 
+def words_to_redis_w1(rdd):
+    top_to_redis = rdd.collect()
+    red.set('top_words_w1_key', top_to_redis)
+
+def words_to_redis_w2(rdd):
+    top_to_redis = rdd.collect()
+    red.set('top_words_w2_key', top_to_redis)
+
+def words_to_redis_w3(rdd):
+    top_to_redis = rdd.collect()
+    red.set('top_words_w3_key', top_to_redis)
+
+def words_to_redis_w4(rdd):
+    top_to_redis = rdd.collect()
+    red.set('top_words_w4_key', top_to_redis)
+
 
 if __name__ == "__main__":
     """ Get streams of twitter messages from Kafka topics,
@@ -275,11 +289,9 @@ if __name__ == "__main__":
 
     # Create input stream that pull messages from Kafka Brokers (DStream object)
     tweets_raw = KafkaUtils.createDirectStream(ssc, [topic], kafkaBrokers)
-    #tweets_raw.pprint()
 
     # Extract tweet text fields from the raw stream
     tweets = raw_stream_to_text(tweets_raw)
-    #tweets.pprint()
 
     # Filter from stream messages that contain theme word
     theme_words = ['food', 'love', 'shop', 'sport']
@@ -287,11 +299,6 @@ if __name__ == "__main__":
     tweets_w2 = tweets.filter(lambda x: theme_words[1] in x)
     tweets_w3 = tweets.filter(lambda x: theme_words[2] in x)
     tweets_w4 = tweets.filter(lambda x: theme_words[3] in x)
-    
-    #tweets_w1.pprint()
-    #tweets_w2.pprint()
-    #tweets_w3.pprint()
-    #tweets_w4.pprint()
 
     # Map tweet text fields to collections of words and their counts
     word_count = messages_to_words(tweets)
@@ -371,8 +378,10 @@ if __name__ == "__main__":
     top_songs_w3.foreachRDD(songs_to_redis_w3)
     top_songs_w4.foreachRDD(songs_to_redis_w4)
     top_words.foreachRDD(words_to_redis)
-    #top_to_redis = rdd.collect()
-    #red.set('top_songs_key', top_to_redis)
+    top_words_w1.foreachRDD(words_to_redis_w1)
+    top_words_w2.foreachRDD(words_to_redis_w2)
+    top_words_w3.foreachRDD(words_to_redis_w3)
+    top_words_w4.foreachRDD(words_to_redis_w4)
 
     ssc.start()
     ssc.awaitTermination()
