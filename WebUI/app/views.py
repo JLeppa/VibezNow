@@ -23,21 +23,25 @@ def theme():
     # Get song suggestion for the given "theme word", and trending words
     if theme == "Food":
         songs = red.get('top_songs_w1_key')
+        words = red.get('top_words_w1_key')
         theme = "Theme: "+theme
     elif theme == "Love":
         songs = red.get('top_songs_w2_key')
+        words = red.get('top_words_w2_key')
         theme = "Theme: "+theme
     elif theme == "Shop":
         songs = red.get('top_songs_w3_key')
+        words = red.get('top_words_w3_key')
         theme = "Theme: "+theme
     elif theme == "Sport":
         songs = red.get('top_songs_w4_key')
+        words = red.get('top_words_w4_key')
         theme = "Theme: "+theme
     else:
         songs = red.get('top_songs_key')
+        words = red.get('top_words_key')
         theme = "No Theme"
     songs = eval(songs)
-    words = red.get('top_words_key')
     words = eval(words)
     song = []
     for item in songs:
