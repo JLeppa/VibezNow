@@ -65,6 +65,7 @@ def word_count_to_ntf(tf_rdd):
     Output is an RDD containing the same list as (term, a+(1-a)*term_freq/max(term_freq))"""
 
     nf = 0.4 # Normalization factor used when calculating normalized term frequency
+    #query_idfs = query_idf_bc.value (OMITTED)
 
     # Search for the max term frequency, max_tf, from all term frequencies, tf
     freq = tf_rdd.map(lambda x: x[1])
@@ -73,8 +74,9 @@ def word_count_to_ntf(tf_rdd):
     # Calculate the ntf
     ntf_rdd = tf_rdd.map(lambda x: (x[0], nf + (1-nf)*x[1]/max_tf))
     return ntf_rdd
-    # Calculate the ntf-idf (OMITTED FOR NOW)
-    #ntf_idf_rdd = ntf_rdd.map(lambda x: (x[0], x[1]*log(query_count/(1+int(query_freq[x[0]])))))
+    
+    # Calculate the ntf-idf (OMITTED)
+    #ntf_idf_rdd = ntf_rdd.map(lambda x: (x[0], x[1]*query_idfs[x[0]]))
     #return ntf_idf_rdd
 
 def take_top_words(rdd):
@@ -230,9 +232,6 @@ if __name__ == "__main__":
     # Get track info in a dictionary, track_id is key, tuple of artist and song as value
     track_info = red.hgetall("track_info_key")
 
-    # Get the list of 4681 words in the order of ntf-idf vectors of lyrics
-    lyric_words = red.get('words_key') # CHECK IF NEEDED
-
     # Get dictionary with stemmed word as key and unstemmed as value
     unstem = red.hgetall('unstem_key')
 
@@ -243,18 +242,32 @@ if __name__ == "__main__":
     word_set = red.get('word_set_key')
     word_set = eval(word_set)
 
-    # Get vector of how many times each word has been present in previous queries
-    query_freq = red.hgetall('hist_freq_key')
+    # Get the list of 4681 words in the order of ntf-idf vectors of lyrics (OMITTED)
+    #lyric_words = red.get('words_key')
+    #lyric_words = eval(lyric_words)
 
-    # Get the total number of previous queries
-    query_count = red.get('hist_count_key')
-    query_count = int(query_count)
+    # Get vector of how many times each word has been present in previous queries (OMITTED)
+    #query_freq = red.get('corpus_frequency_key')
+    #query_freq = eval(query_freq)
+
+    # Get the total number of previous queries (OMITTED)
+    #query_count = red.get('corpus_count_key')
+    #query_count = float(query_count)
+
+    # Calculate query idf values and put them in dictionary using word as key (OMITTED)
+    #query_idf = {}
+    #idf_index = 0
+    #for value in query_freq:
+    #    idf_value = log(1+query_count/(1+value))
+    #    idf_word = lyric_words[idf_index]
+    #    query_idf[idf_word] = max(idf_value, 0)
+    #    idf_index += 1
 
     # Get the lyrics of 237642 songs as sparse bag of words
     #  key=track_id, value=(indeces to words, ntf-idf of words, norm of lyrics vector)
     lyrics_vec_dict = red.hgetall('ntf_idf_lyrics_key')
     lyrics_dict = {}
-    line_limit = 100000
+    line_limit = 237642 #100000
     counter = 0
     for key in lyrics_vec_dict:
         # track_id: ([indeces], [tf-idf], vec_norm)
@@ -269,13 +282,14 @@ if __name__ == "__main__":
     sc = SparkContext(appName="TwitterStreaming")
     
     # Set Spark streaming context (connection to spark cluster, make Dstreams)
-    batch_duration = 120  # Batch duration (s)
+    batch_duration = 360  # Batch duration (s)
     ssc = StreamingContext(sc, batch_duration)
 
-    # Broadcast word_set, unstemming dictionary,  lyrics to nodes
+    # Broadcast word_set, unstemming dictionary, lyrics and query_idf to nodes
     word_set_bc = sc.broadcast(word_set)
     unstem_bc = sc.broadcast(unstem)
     lyrics_bc = sc.broadcast(lyrics_dict)
+    #query_idf_bc = sc.broadcast(query_idf) (OMITTED)
 
     # Set the Kafka topic
     topic = "twitter_stream_new"
@@ -305,7 +319,6 @@ if __name__ == "__main__":
     word_count_w2 = messages_to_words(tweets_w2)
     word_count_w3 = messages_to_words(tweets_w3)
     word_count_w4 = messages_to_words(tweets_w4)
-    #word_count.pprint()
 
     # Calculate normalized term frequency, ntf
     ntf = word_count.transform(word_count_to_ntf)
@@ -313,10 +326,6 @@ if __name__ == "__main__":
     ntf_w2 = word_count_w2.transform(word_count_to_ntf)
     ntf_w3 = word_count_w3.transform(word_count_to_ntf)
     ntf_w4 = word_count_w4.transform(word_count_to_ntf)
-
-    # Update historical query frequency and count
-    #query_count += 1
-    #query_freq OMITTED
 
     # Pick up n words with highest ntf-idf values (word, tf)
     top_words = ntf.transform(take_top_words)
@@ -338,6 +347,7 @@ if __name__ == "__main__":
     tweet_sparse_norm_w2 = ntf_ind_w2.transform(tuples_to_sparse)
     tweet_sparse_norm_w3 = ntf_ind_w3.transform(tuples_to_sparse)
     tweet_sparse_norm_w4 = ntf_ind_w4.transform(tuples_to_sparse)
+    #tweet_sparse_norm.pprint()
 
     # Calculate the cosine similarity, return (track_id, similarity) tuples
     #  and get top ten suggestions
@@ -352,6 +362,7 @@ if __name__ == "__main__":
     lyrics_similarity_w3 = lyrics_similarity_w3.transform(take_top)
     lyrics_similarity_w4 = tweet_sparse_norm_w4.flatMap(lambda x: loop_lyrics(x))
     lyrics_similarity_w4 = lyrics_similarity_w4.transform(take_top)
+    #lyrics_similarity.pprint()
 
     # Get the lyric info of the top n songs ((artist, song), similarity)
     top_songs = lyrics_similarity.map(lambda x: (track_info[x[0]], x[1]))
@@ -359,6 +370,7 @@ if __name__ == "__main__":
     top_songs_w2 = lyrics_similarity_w2.map(lambda x: (track_info[x[0]], x[1]))
     top_songs_w3 = lyrics_similarity_w3.map(lambda x: (track_info[x[0]], x[1]))
     top_songs_w4 = lyrics_similarity_w4.map(lambda x: (track_info[x[0]], x[1]))
+    #top_songs.pprint()
     
     # Write top songs and words to redis
     top_songs.foreachRDD(songs_to_redis)
