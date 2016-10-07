@@ -4,26 +4,62 @@
      <div class="starter-template">
        <div class="row" style="height:100vh;">
                <div class="col-md-10 col-md-offset-1">
+		 <form action="theme" method="POST">
+		   <div class="form-group text-center">
+		     <br /><br />
+		     <select class="form-control" name="theme">
+                       <option>No Theme</option>
+		       <option>Food</option>
+                       <option>Love</option>
+                       <option>Shop</option>
+		       <option>Sport</option>
+                     </select>
+		     <br /><br />
+		     <button type="submit" formmethod="post" value="Send" name="theme" class="btn btn-default id-submit" style>Submit</button>
+		   </div>
+		 </form>
+		   <body>
+		     {% for val in output %}
+		     <h2>{{val.theme_word}}</h2>
+		     {% endfor %}
+		   </body>
+		   <table class="table">
+		     <thead>
+		       <tr>
+			 <th><h3><b>Twitter words:</b></h3></th>
+			 <br />
+			 {% for val in output %}
+			 {% for value in val.words %}
+                         <th><h4><b>{{value}}</b></h4></th>
+                         {% endfor %}
+			 {% endfor %}
+		       </tr>
+		     </thead>
+		   </table>
                    <table class="table">
                      <thead>
                        <tr>
-                         <th>Trendy Words:</th>
-                         <th>Artist:</th>
-			 <th>Song:</th>
+                         <th><h3><b>Artist:</b></h3></th>
+			 <th><h3><b>Song:</b></h3></th>
                        </tr>
                      </thead>
                      <tbody>
                        {% for val in output %}
                        <tr>
+			 <td>
+			   <ul>
+                           {% for value in val.artist %}
+                             <li style="font-size:20px";>{{value}}</li>
+                           {% endfor %}
+                           </ul>
+			 </td>
                          <td>
 			   <ul>
-			   {% for value in val.words %}
-			     <li>{{value}}</li>
-			   {% endfor %}
-			   </ul>
+                           {% for value in val.song %}
+                             <li style="font-size:20px";>{{value}}</li>
+                           {% endfor %}
+                           </ul>
 			 </td>
-			 <td>{{val.artist}}</td>
-                         <td>{{val.song}}</td>
                        </tr>
                        {% endfor %}
                      </tbody>

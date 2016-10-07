@@ -9,7 +9,7 @@
     <meta name="author" content="">
     <link rel="icon" href="../../favicon.ico">
 
-    <title>VibezNow</title>
+    <title>Starter Template for Bootstrap</title>
 
     <!-- Bootstrap core CSS -->
     <link href="../static/css/bootstrap.min.css" rel="stylesheet">
@@ -37,7 +37,7 @@
 
       <div class="starter-template">
         <h1>VibezNow</h1>
-        <h2>Twittering the Songs for Today</h2>
+        <h2>Music to Match Trending Topics</h2>
 	{% block user_id %}{% endblock %}
 	{% block user_op %}{% endblock %}
       </div>
