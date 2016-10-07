@@ -166,7 +166,6 @@ def loop_lyrics_ordered(tweet_vector_norm):
 
 def take_top(rdd):
     # input format (track_id, cos_similarity)
-    #rdd = rdd.map(lambda x: (x[1], x[0]))
     cos_values = rdd.map(lambda x: x[1])
     n = 10
     top_n_val = cos_values.takeOrdered(n, key=lambda x: -x)
@@ -314,7 +313,6 @@ if __name__ == "__main__":
     ntf_w2 = word_count_w2.transform(word_count_to_ntf)
     ntf_w3 = word_count_w3.transform(word_count_to_ntf)
     ntf_w4 = word_count_w4.transform(word_count_to_ntf)
-    #ntf.pprint()
 
     # Update historical query frequency and count
     #query_count += 1
@@ -326,7 +324,6 @@ if __name__ == "__main__":
     top_words_w2 = ntf_w2.transform(take_top_words)
     top_words_w3 = ntf_w3.transform(take_top_words)
     top_words_w4 = ntf_w4.transform(take_top_words)
-    #top_words.pprint()
 
     # Map the (word, weight) tuples into (word_index, weight) tuples
     ntf_ind = ntf.map(lambda x: (int(word_index[x[0]]), x[1]))
@@ -334,7 +331,6 @@ if __name__ == "__main__":
     ntf_ind_w2 = ntf_w2.map(lambda x: (int(word_index[x[0]]), x[1]))
     ntf_ind_w3 = ntf_w3.map(lambda x: (int(word_index[x[0]]), x[1]))
     ntf_ind_w4 = ntf_w4.map(lambda x: (int(word_index[x[0]]), x[1]))
-    #ntf_ind.pprint()
 
     # Convert tuples into sparse vector
     tweet_sparse_norm = ntf_ind.transform(tuples_to_sparse)
@@ -342,7 +338,6 @@ if __name__ == "__main__":
     tweet_sparse_norm_w2 = ntf_ind_w2.transform(tuples_to_sparse)
     tweet_sparse_norm_w3 = ntf_ind_w3.transform(tuples_to_sparse)
     tweet_sparse_norm_w4 = ntf_ind_w4.transform(tuples_to_sparse)
-    #tweet_sparse_norm.pprint()
 
     # Calculate the cosine similarity, return (track_id, similarity) tuples
     #  and get top ten suggestions
@@ -357,7 +352,6 @@ if __name__ == "__main__":
     lyrics_similarity_w3 = lyrics_similarity_w3.transform(take_top)
     lyrics_similarity_w4 = tweet_sparse_norm_w4.flatMap(lambda x: loop_lyrics(x))
     lyrics_similarity_w4 = lyrics_similarity_w4.transform(take_top)
-    #lyrics_similarity.pprint()
 
     # Get the lyric info of the top n songs ((artist, song), similarity)
     top_songs = lyrics_similarity.map(lambda x: (track_info[x[0]], x[1]))
@@ -365,11 +359,6 @@ if __name__ == "__main__":
     top_songs_w2 = lyrics_similarity_w2.map(lambda x: (track_info[x[0]], x[1]))
     top_songs_w3 = lyrics_similarity_w3.map(lambda x: (track_info[x[0]], x[1]))
     top_songs_w4 = lyrics_similarity_w4.map(lambda x: (track_info[x[0]], x[1]))
-    #top_songs.pprint()
-    #top_songs_w1.pprint()
-    #top_songs_w2.pprint()
-    #top_songs_w3.pprint()
-    #top_songs_w4.pprint()
     
     # Write top songs and words to redis
     top_songs.foreachRDD(songs_to_redis)
