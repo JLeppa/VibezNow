@@ -267,7 +267,7 @@ if __name__ == "__main__":
     #  key=track_id, value=(indeces to words, ntf-idf of words, norm of lyrics vector)
     lyrics_vec_dict = red.hgetall('ntf_idf_lyrics_key')
     lyrics_dict = {}
-    line_limit = 237642 #100000
+    line_limit = 237642
     counter = 0
     for key in lyrics_vec_dict:
         # track_id: ([indeces], [tf-idf], vec_norm)
@@ -282,7 +282,7 @@ if __name__ == "__main__":
     sc = SparkContext(appName="TwitterStreaming")
     
     # Set Spark streaming context (connection to spark cluster, make Dstreams)
-    batch_duration = 360  # Batch duration (s)
+    batch_duration = 180  # Batch duration (s)
     ssc = StreamingContext(sc, batch_duration)
 
     # Broadcast word_set, unstemming dictionary, lyrics and query_idf to nodes
@@ -347,7 +347,6 @@ if __name__ == "__main__":
     tweet_sparse_norm_w2 = ntf_ind_w2.transform(tuples_to_sparse)
     tweet_sparse_norm_w3 = ntf_ind_w3.transform(tuples_to_sparse)
     tweet_sparse_norm_w4 = ntf_ind_w4.transform(tuples_to_sparse)
-    #tweet_sparse_norm.pprint()
 
     # Calculate the cosine similarity, return (track_id, similarity) tuples
     #  and get top ten suggestions
@@ -362,7 +361,6 @@ if __name__ == "__main__":
     lyrics_similarity_w3 = lyrics_similarity_w3.transform(take_top)
     lyrics_similarity_w4 = tweet_sparse_norm_w4.flatMap(lambda x: loop_lyrics(x))
     lyrics_similarity_w4 = lyrics_similarity_w4.transform(take_top)
-    #lyrics_similarity.pprint()
 
     # Get the lyric info of the top n songs ((artist, song), similarity)
     top_songs = lyrics_similarity.map(lambda x: (track_info[x[0]], x[1]))
@@ -370,7 +368,6 @@ if __name__ == "__main__":
     top_songs_w2 = lyrics_similarity_w2.map(lambda x: (track_info[x[0]], x[1]))
     top_songs_w3 = lyrics_similarity_w3.map(lambda x: (track_info[x[0]], x[1]))
     top_songs_w4 = lyrics_similarity_w4.map(lambda x: (track_info[x[0]], x[1]))
-    #top_songs.pprint()
     
     # Write top songs and words to redis
     top_songs.foreachRDD(songs_to_redis)
