@@ -6,8 +6,9 @@ Project for Data Engineering program at Insight Data Science, Silicon Valley, fa
 
 [Insight Data Engineering Homepage](http://www.insightdataengineering.com)
 
-Project Website: [VibezNow.top] (vibeznow.top)
-Project [Presentation] (bit.do/VibezNow) 
+Project Website: [VibezNow.top] (http://www.vibeznow.top)
+
+Project [Presentation] (http://www.bit.do/VibezNow) 
 
 Most people listen to music that suits their current mood or occasion. The purpose of this project is to provide in real-time song suggestions that reflect what people are talking about, what is going on in their life. This is achieved by collecting Twitter tweets over a short period of time and making a bag-of-words vector of the words used in those messages. The lyrics of songs from [musiXmatch] (http://labrosa.ee.columbia.edu/millionsong/musixmatch) dataset are preprocessed into the bag-of-words vectors, and the songs that reflect best the tweets are chosen based on cosine similarity between the tweet-vector and the lyrics-vectors. Additionally, the user may choose a theme word, in which case only the tweets including that word are used when calculating the tweet-vector. New top 10 suggestions are provided every three minutes.
 
