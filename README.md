@@ -43,3 +43,6 @@ After being filtered into themes, the messages are divided into separate words k
 
 It should be noted that the inverse document frequency is not calculated for the tweet vectors. Such calculation would be technically straightforward to add, but it was found out to produce undesired side effects, namely emphasizing foreign words with extremely low term frequencies, making the suggestions very random.
 
+## **WebUI**
+
+The WebUI is build with Flask micro-web framework, with Tornado server used to handle multiple users. In the first view of the web page, the user is given the option to choose either not to have any special theme, or any of the four predefined themes. After submitting the choice, the user is shown the top ten artist and song title suggestions and the top ten words on which the suggestions were based on. The user may then choose another topic and will be provided new suggestions based on that choice.
