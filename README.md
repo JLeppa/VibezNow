@@ -21,9 +21,9 @@ Most people listen to music that suits their current mood or occasion. The purpo
 
 The lyrics in the musiXmatch dataset were obtained as two text files, mxm_dataset_train.txt and mxm_data_set_train.txt, which contained the 5000 most common words in the whole dataset, and the lyrics of 237,662 songs in the sparse bag-of-words vector format of raw counts of words matching the list of 5000 words. The conducted preprocessing of those lyrics included the following steps:
 
-1. Stopwords, as provided in the stopwords.txt, numbers and words with non-UTF-8 characters were removed from the list of words resulting to a new list of 4681 words. The bag-of-words vectors were mapped to this new list of words.
+1. Stopwords, as provided in the *stopwords.txt*, numbers and words with non-UTF-8 characters were removed from the list of words resulting to a new list of 4681 words. The bag-of-words vectors were mapped to this new list of words.
 
-2. Songs with no lyrics or missing either name of the artist or title of the song in the unique_tracks.txt file were omitted, resulting to a total of 237,642 songs.
+2. Songs with no lyrics or missing either name of the artist or title of the song in the *unique_tracks.txt* file were omitted, resulting to a total of 237,642 songs.
 
 3. For each word, the number of lyrics that the word appeared in was calculated, as was the maximum count of each word within a single lyrics. These values were used to calculate normalized term frequencies, tf-idf, that account for different length of the lyrics and putting more weight on words that appear less frequently in the lyrics. 
 
@@ -39,9 +39,9 @@ The Twitter tweets are ingested using Kafka with the messages being produced to 
 
 The tweets are continuously processed in small batches using Spark Streaming process *spark_streaming_process.py*. That process connects directly to the Kafka topic to consume the messages. First the message parts are extracted from the incoming tweets, and links and non-letter characters are removed. The the cleaned messages are filtered into five themes with general theme containing all messages and four special themes containing only messages that include a theme-word. Theme-words were chosen to be "Food", "Love", "Shop" and "Sport", and they were chosen arbitrarily to present topics that people are often interested in, and they are also common enough that there would be non-negligible number of messages filtered to those themes for each batch processed.
 
-After being filtered into themes, the messages are divided into separate words keeping only the words included in the set of 4681 words used in the bag-of-words vectors of the lyrics. The words are then counted and normalized relative to the most frequent word in order to account for the varrying amounts of words used in a batch of tweets. The normalized word frequencies are mapped into the same sparse vector bag-of-words format as the lyrics, and the second norm of the vector is calculated. Finally, the cosine similarity is calculated between each combination of lyrics vector and the tweet vectors representing the five themes. For the top ten similarities, the artists and song titles are cached into a Redis database along with the top ten words that had the highest weight in the tweet vectors.
+After being filtered into themes, the messages are divided into separate words keeping only the words included in the set of 4681 words used in the bag-of-words vectors of the lyrics. The words are then counted and normalized relative to the most frequent word in order to account for the varrying amounts of words used in a batch of tweets. The normalized word frequencies are mapped into the same sparse vector bag-of-words format as the lyrics, and the second norm of the vector is calculated. Finally, the cosine similarity is calculated between each combination of lyrics-vector and the tweet-vectors representing the five themes. For the top ten similarities, the artists and song titles are cached into a Redis database along with the top ten words that had the highest weight in the tweet vectors.
 
-It should be noted that the inverse document frequency is not calculated for the tweet vectors. Such calculation would be technically straightforward to add, but it was found out to produce undesired side effects, namely emphasizing foreign words with extremely low term frequencies, making the suggestions very random.
+It should be noted that the inverse document frequency is not calculated for the tweet-vectors. Such calculation would be technically straightforward to add, but it was found out to produce undesired side effects, namely emphasizing foreign words with extremely low term frequencies, making the suggestions very random.
 
 ## **WebUI**
 
