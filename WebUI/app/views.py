@@ -2,6 +2,9 @@ from app import app
 from flask import render_template, request, jsonify
 import redis
 import simplejson
+import sys
+reload(sys)
+sys.setdefaultencoding("utf-8")
 
 # Set up a connection to Redis
 with open("redis_pw.json.nogit") as fh:
@@ -52,9 +55,15 @@ def theme():
         artist_list.append(item[0])
         song_list.append(item[1])
     word_list = []
+    counter = 0
     for item in words:
         word_list.append(item[0])
+        counter += 1
+        if counter > 9:
+            break
     
     # Return the top words and songs
+    print song_list
+    print artist_list
     jsonresponse = {"artist": artist_list, "song": song_list,  "words": word_list, "theme_word": theme}
     return render_template("user_op.html", output=[jsonresponse])
