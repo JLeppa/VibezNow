@@ -1,6 +1,5 @@
 {% extends "mybase.html" %}
 {% block user_op %}
-<div class="container">
      <div class="starter-template">
        <div class="row" style="height:100vh;">
                <div class="col-md-4 col-md-offset-4">
@@ -28,7 +27,7 @@
 		   <table class="table">
 		     <thead>
 		       <tr>
-			 <th><h3><b>Twitter words:</b></h3></th>
+			 <th><h3><b><font color="blue">Twitter words:</font></b></h3></th>
 			 <br />
 			 {% for val in output %}
 			 {% for value in val.words %}
@@ -41,8 +40,8 @@
                    <table class="table">
                      <thead>
                        <tr>
-                         <th><h3><b>Artist:</b></h3></th>
-			 <th><h3><b>Song:</b></h3></th>
+                         <th><h3><b><font color="blue">Artist:</font></b></h3></th>
+			 <th><h3><b><font color="blue">Song:</font></b></h3></th>
                        </tr>
                      </thead>
                      <tbody>
@@ -69,5 +68,4 @@
                </div>
        </div>
      </div>
-   </div>
 {% endblock %}
