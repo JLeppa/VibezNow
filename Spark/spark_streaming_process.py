@@ -89,6 +89,25 @@ def take_top_words(rdd):
     top_words = top_n.map(lambda x: (unstem_bc.value[x[0]], x[1]))
     return top_words
 
+def process_ntf_to_suggestions(ntf):
+    # Map the (word, weight) tuples into (word_index, weight) tuples
+    word_index = word_index_bc.value
+    ntf_ind = ntf.map(lambda x: (int(word_index[x[0]]), x[1]))
+
+    # Convert tuples into sparse vector
+    tweet_sparse_norm = ntf_ind.transform(tuples_to_sparse)
+
+    # Calculate the cosine similarity, return (track_id, similarity) tuples
+    #  and get top ten suggestions
+    #lyrics_similarity = tweet_sparse_norm.flatMap(lambda x: loop_lyrics_ordered(x))
+    lyrics_similarity = tweet_sparse_norm.flatMap(lambda x: loop_lyrics(x))
+    lyrics_similarity = lyrics_similarity.transform(take_top)
+
+    # Get the lyric info of the top n songs ((artist, song), similarity)
+    track_info = track_info_bc.value
+    top_songs = lyrics_similarity.map(lambda x: (track_info[x[0]], x[1]))
+    return top_songs
+
 def tuples_to_sparse(ind_rdd):
     """ Transform input RDD with (word_index, ntf_idf) tuples into sparse vector of length 4681. """
 
@@ -176,23 +195,28 @@ def take_top(rdd):
 
 def songs_to_redis(rdd):
     top_to_redis = rdd.collect()
-    red.set('top_songs_key', top_to_redis)
+    if top_to_redis:
+        red.set('top_songs_key', top_to_redis)
 
 def songs_to_redis_w1(rdd):
     top_to_redis = rdd.collect()
-    red.set('top_songs_w1_key', top_to_redis)
+    if top_to_redis:
+        red.set('top_songs_w1_key', top_to_redis)
 
 def songs_to_redis_w2(rdd):
     top_to_redis = rdd.collect()
-    red.set('top_songs_w2_key', top_to_redis)
+    if top_to_redis:
+        red.set('top_songs_w2_key', top_to_redis)
 
 def songs_to_redis_w3(rdd):
     top_to_redis = rdd.collect()
-    red.set('top_songs_w3_key', top_to_redis)
+    if top_to_redis:
+        red.set('top_songs_w3_key', top_to_redis)
 
 def songs_to_redis_w4(rdd):
     top_to_redis = rdd.collect()
-    red.set('top_songs_w4_key', top_to_redis)
+    if top_to_redis:
+        red.set('top_songs_w4_key', top_to_redis)
 
 def words_to_redis(rdd):
     top_to_redis = rdd.collect()
@@ -282,13 +306,15 @@ if __name__ == "__main__":
     sc = SparkContext(appName="TwitterStreaming")
     
     # Set Spark streaming context (connection to spark cluster, make Dstreams)
-    batch_duration = 180  # Batch duration (s)
+    batch_duration = 240  # Batch duration (s)
     ssc = StreamingContext(sc, batch_duration)
 
     # Broadcast word_set, unstemming dictionary, lyrics and query_idf to nodes
     word_set_bc = sc.broadcast(word_set)
     unstem_bc = sc.broadcast(unstem)
     lyrics_bc = sc.broadcast(lyrics_dict)
+    word_index_bc = sc.broadcast(word_index)
+    track_info_bc = sc.broadcast(track_info)
     #query_idf_bc = sc.broadcast(query_idf) (OMITTED)
 
     # Set the Kafka topic
@@ -334,52 +360,26 @@ if __name__ == "__main__":
     top_words_w3 = ntf_w3.transform(take_top_words)
     top_words_w4 = ntf_w4.transform(take_top_words)
 
-    # Map the (word, weight) tuples into (word_index, weight) tuples
-    ntf_ind = ntf.map(lambda x: (int(word_index[x[0]]), x[1]))
-    ntf_ind_w1 = ntf_w1.map(lambda x: (int(word_index[x[0]]), x[1]))
-    ntf_ind_w2 = ntf_w2.map(lambda x: (int(word_index[x[0]]), x[1]))
-    ntf_ind_w3 = ntf_w3.map(lambda x: (int(word_index[x[0]]), x[1]))
-    ntf_ind_w4 = ntf_w4.map(lambda x: (int(word_index[x[0]]), x[1]))
-
-    # Convert tuples into sparse vector
-    tweet_sparse_norm = ntf_ind.transform(tuples_to_sparse)
-    tweet_sparse_norm_w1 = ntf_ind_w1.transform(tuples_to_sparse)
-    tweet_sparse_norm_w2 = ntf_ind_w2.transform(tuples_to_sparse)
-    tweet_sparse_norm_w3 = ntf_ind_w3.transform(tuples_to_sparse)
-    tweet_sparse_norm_w4 = ntf_ind_w4.transform(tuples_to_sparse)
-
-    # Calculate the cosine similarity, return (track_id, similarity) tuples
-    #  and get top ten suggestions
-    #lyrics_similarity = tweet_sparse_norm.flatMap(lambda x: loop_lyrics_ordered(x))
-    lyrics_similarity = tweet_sparse_norm.flatMap(lambda x: loop_lyrics(x))
-    lyrics_similarity = lyrics_similarity.transform(take_top)
-    lyrics_similarity_w1 = tweet_sparse_norm_w1.flatMap(lambda x: loop_lyrics(x))
-    lyrics_similarity_w1 = lyrics_similarity_w1.transform(take_top)
-    lyrics_similarity_w2 = tweet_sparse_norm_w2.flatMap(lambda x: loop_lyrics(x))
-    lyrics_similarity_w2 = lyrics_similarity_w2.transform(take_top)
-    lyrics_similarity_w3 = tweet_sparse_norm_w3.flatMap(lambda x: loop_lyrics(x))
-    lyrics_similarity_w3 = lyrics_similarity_w3.transform(take_top)
-    lyrics_similarity_w4 = tweet_sparse_norm_w4.flatMap(lambda x: loop_lyrics(x))
-    lyrics_similarity_w4 = lyrics_similarity_w4.transform(take_top)
-
-    # Get the lyric info of the top n songs ((artist, song), similarity)
-    top_songs = lyrics_similarity.map(lambda x: (track_info[x[0]], x[1]))
-    top_songs_w1 = lyrics_similarity_w1.map(lambda x: (track_info[x[0]], x[1]))
-    top_songs_w2 = lyrics_similarity_w2.map(lambda x: (track_info[x[0]], x[1]))
-    top_songs_w3 = lyrics_similarity_w3.map(lambda x: (track_info[x[0]], x[1]))
-    top_songs_w4 = lyrics_similarity_w4.map(lambda x: (track_info[x[0]], x[1]))
-    
-    # Write top songs and words to redis
-    top_songs.foreachRDD(songs_to_redis)
-    top_songs_w1.foreachRDD(songs_to_redis_w1)
-    top_songs_w2.foreachRDD(songs_to_redis_w2)
-    top_songs_w3.foreachRDD(songs_to_redis_w3)
-    top_songs_w4.foreachRDD(songs_to_redis_w4)
+    # Write top words into Redis
     top_words.foreachRDD(words_to_redis)
     top_words_w1.foreachRDD(words_to_redis_w1)
     top_words_w2.foreachRDD(words_to_redis_w2)
     top_words_w3.foreachRDD(words_to_redis_w3)
     top_words_w4.foreachRDD(words_to_redis_w4)
+
+    # Process ntf into top n suggestions (artist, song title)
+    top_songs = process_ntf_to_suggestions(ntf)
+    top_songs_w1 = process_ntf_to_suggestions(ntf_w1)
+    top_songs_w2 = process_ntf_to_suggestions(ntf_w2)
+    top_songs_w3 = process_ntf_to_suggestions(ntf_w3)
+    top_songs_w4 = process_ntf_to_suggestions(ntf_w4)
+
+    # Write top songs into redis
+    top_songs.foreachRDD(songs_to_redis)
+    top_songs_w1.foreachRDD(songs_to_redis_w1)
+    top_songs_w2.foreachRDD(songs_to_redis_w2)
+    top_songs_w3.foreachRDD(songs_to_redis_w3)
+    top_songs_w4.foreachRDD(songs_to_redis_w4)
 
     ssc.start()
     ssc.awaitTermination()
