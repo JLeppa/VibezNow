@@ -10,6 +10,8 @@ Project Website: [VibezNow.top] (http://www.vibeznow.top)
 
 [Presentation] (http://www.bit.do/VibezNow) of the Project
 
+The project was built in three weeks using open source technologies with the data pipeline running on AWS.
+
 Data technologies used:
 - Kafka
 - Spark Streaming
